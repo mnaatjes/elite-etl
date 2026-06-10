@@ -1,20 +1,9 @@
 {
-    "base_download_dir": "data/downloads",
-    "datasets": [
-        {
-            "id": "eddn_commodity_schema",
-            "source_uri": "https://raw.githubusercontent.com/EDCD/EDDN/master/schemas/commodity-v3.0.json",
-            "expected_checksum": null
-        },
-        {
-            "id": "eddn_blackmarket_schema",
-            "source_uri": "https://raw.githubusercontent.com/EDCD/EDDN/master/schemas/blackmarket-v1.0.json",
-            "expected_checksum": null
-        },
-        {
-            "id": "spansh_systems_1day",
-            "source_uri": "https://downloads.spansh.co.uk/systems_1day.json.gz",
-            "expected_checksum": null
-        }
-    ]
+    "sampling": {
+        "max_rows": 1000,
+        "max_bytes": 10485760
+    },
+    "logging": {
+        "level": "INFO"
+    }
 }
