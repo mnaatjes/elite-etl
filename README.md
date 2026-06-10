@@ -46,6 +46,40 @@ Utilizing **Python Rich** for high-signal visual feedback. This transforms the t
 * **Separation of Concerns:** UI code (presentation) is isolated to `main.py` or `src/ui/`. The `src/engine/` remains pure logic, returning data that the UI then formats.
 * **Log Redirection:** Use `rich.logging` to ensure that logs remain informative and visually structured even during headless operations.
 
+## Data Modeling Strategy
+
+To maintain scalability and type safety, the system differentiates between three distinct types of models:
+
+### 1. The "Control Plane" Models (SQLAlchemy)
+**Location:** `src/engine/models.py`
+* **Purpose:** These represent the **System State**. They define what sources exist and what their "approved contracts" are.
+* **Structure:** Standard SQLAlchemy classes.
+* **Example:** A `Source` table that has a `target_table_name` and a `json_schema` column (storing the approved schema as a JSON string).
+
+### 2. The "Data Contract" Schemas (Derived/Dynamic)
+**Location:** `data/schemas/*.json` (Persisted) and `src/engine/schema.py` (Logic)
+* **Purpose:** These are the **Dynamic Blueprints** derived from your downloads. They are not Python code; they are data (JSON Schema or YAML).
+* **Rationale:** Elite Dangerous data is too vast and changes too often to hardcode as Python Dataclasses. Dynamic schemas prevent constant code rewrites.
+* **Recommendation:** Use **Pydantic** to dynamically validate data against the JSON stored in the Metadata Store.
+
+### 3. The "Transfer" Dataclasses (Domain)
+**Location:** `src/engine/types.py`
+* **Purpose:** Lightweight Python Dataclasses used to pass internal state between engine components.
+* **Example:** A `DownloadResult` dataclass containing `file_path`, `sha256`, and `byte_count`.
+
+---
+
+### Architecture Recommendation: "Metadata-as-Code"
+
+To maintain a clean directory and naming convention:
+```text
+src/
+└── engine/
+    ├── models.py      <-- SYSTEM MODELS (SQLAlchemy: Source, Job, Contract)
+    ├── schema.py      <-- SCHEMA LOGIC (Inference, Validation, Translation)
+    └── types.py       <-- TRANSFER TYPES (Dataclasses: DownloadResult, IngestSummary)
+```
+
 ## Infrastructure & Components
 
 The pipeline relies on a robust infrastructure to manage both the processed data and the system's own state:

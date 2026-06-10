@@ -1,372 +1,474 @@
-import sys
-import os
-import json
-import argparse
-import shutil
-from pathlib import Path
+import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.prompt import Confirm, Prompt
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich import print as rprint
+from pathlib import Path
+from typing import Optional
+import shutil
+import os
+from loguru import logger
 
-# Ensure the current directory is in the path so we can import from src
-sys.path.append(os.getcwd())
+from src.engine.factory import EngineFactory
+from src.workflows.onboard import OnboardingWorkflow
+from src.workflows.ingest import IngestionWorkflow
+from src.engine.resource import MemoryGuard
 
-from src.adapters.local_manifest_repository import LocalManifestRepository
-from src.adapters.http_downloader import HttpDownloaderAdapter
-from src.adapters.json_analyzer import JsonAnalyzerAdapter
-from src.application.downloader_service import DownloaderService
-from src.application.analyzer_service import AnalyzerService
-from src.application.normalization_service import NormalizationService
-from src.application.loader_service import LoaderService
-from src.adapters.postgres_adapter import PostgresAdapter
-from src.utils.db_utils import ping_database
-
+app = typer.Typer(help="Elite Dangerous Metadata-Driven Pipeline CLI")
 console = Console()
 
-def load_config():
-    if not os.path.exists("config.json"):
-        return {"base_download_dir": "data", "datasets": []}
-    with open("config.json", "r") as f:
-        return json.load(f)
-
-def verify_permissions(data_dir: str):
-    """Verifies that the data directory has safe and functional permissions."""
-    path = Path(data_dir)
-    if not path.exists():
-        path.mkdir(parents=True, exist_ok=True)
-    
-    if not os.access(path, os.W_OK):
-        console.print(f"[bold red]CRITICAL ERROR:[/bold red] Data directory '{data_dir}' is not writable by current user.")
-        sys.exit(1)
-        
-    # Check for overly broad permissions (World Writable)
-    mode = os.stat(path).st_mode
-    if mode & 0o002:
-        console.print(f"[bold yellow]SECURITY WARNING:[/bold yellow] Data directory '{data_dir}' is world-writable (777).")
-        console.print("Recommended: [cyan]chmod 750 " + data_dir + "[/cyan]")
-
-def display_global_status(config, manifest_repo):
-    """Displays a dashboard of all datasets and their current pipeline state."""
-    # Infrastructure Check (Quiet)
-    db_online, _ = ping_database()
-    if not db_online:
-        console.print("\n[bold red]⚠ Database is Offline.[/bold red] Run [cyan].scripts/setup_db.sh[/cyan] before loading data.")
-
-    table = Table(title="[bold blue]Data Pipeline: Global Orchestrator Dashboard", title_justify="left", show_header=True, header_style="bold magenta")
-    table.add_column("Dataset ID", style="cyan", no_wrap=True)
-    table.add_column("Current Status", justify="left")
-    table.add_column("Ready for Load", justify="center")
-    table.add_column("Next Suggested Command", style="yellow")
-
-    status_colors = {
-        "READY_FOR_LOAD": "bold green",
-        "NORMALIZATION_PROPOSED": "bold yellow",
-        "SAMPLED": "yellow",
-        "DOWNLOADED": "cyan",
-        "PENDING": "dim white",
-        "FAILED": "bold red"
-    }
-
-    for dataset in config.get("datasets", []):
-        ds_id = dataset["id"]
-        manifest = manifest_repo.get(ds_id)
-        
-        raw_status = "PENDING"
-        ready = "[red]No[/red]"
-        next_cmd = f"python3 main.py {ds_id}"
-        
-        if manifest:
-            raw_status = manifest.status
-            if "FAILED" in raw_status:
-                status_display = f"[bold red]{raw_status}[/bold red]"
-                next_cmd = f"python3 main.py {ds_id} (Retry)"
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context):
+    """
+    Elite Dangerous Metadata-Driven Pipeline: The Flight Controller.
+    """
+    if ctx.invoked_subcommand is None:
+        console.clear()
+        console.print(Panel.fit(
+            "[bold blue]Elite Dangerous Metadata-Driven Pipeline[/bold blue]\n"
+            "[dim]The Workflow-Centric Orchestration Engine[/dim]",
+            border_style="magenta"
+        ))
+        try:
+            factory = EngineFactory()
+            db = factory.get_db()
+            from src.engine.models import Source, SyncJob
+            
+            source_count = db.query(Source).count()
+            last_job = db.query(SyncJob).order_by(SyncJob.started_at.desc()).first()
+            
+            status_table = Table.grid(padding=1)
+            status_table.add_column(style="cyan", justify="right")
+            status_table.add_column(style="white")
+            
+            status_table.add_row("Registered Sources:", str(source_count))
+            if last_job:
+                status_style = "green" if last_job.status == "success" else "red" if last_job.status == "failed" else "yellow"
+                status_table.add_row("Latest Sync Status:", f"[{status_style}]{last_job.status}[/{status_style}]")
             else:
-                color = status_colors.get(raw_status, "white")
-                status_display = f"[{color}]{raw_status}[/{color}]"
-                ready = "[green]Yes[/green]" if manifest.validation.is_human_approved else "[red]No[/red]"
+                status_table.add_row("Latest Sync Status:", "[yellow]N/A[/yellow]")
+
+            # Resource Monitoring
+            guard = MemoryGuard()
+            usage = guard.get_current_usage()
+            status_table.add_row("System Memory:", f"{usage.percent}% used ({usage.used_mb:.1f} MB by CLI)")
+
+            console.print(Panel(status_table, title="[bold]System Status[/bold]", border_style="blue", expand=False))
+            db.close()
+        except Exception:
+            console.print("[dim yellow]Note: Metadata database not yet initialized.[/dim yellow]")
+
+        # Quick Help
+        help_table = Table.grid(padding=1)
+        help_table.add_column(style="green")
+        help_table.add_column(style="dim")
+        
+        help_table.add_row("onboard [URL]", "Register a new data source")
+        help_table.add_row("migrate", "Synchronize schemas to PostgreSQL")
+        help_table.add_row("ingest [NAME]", "Perform high-speed data ingestion")
+        help_table.add_row("status", "View detailed sync history")
+        help_table.add_row("list", "Show all registered sources")
+        help_table.add_row("clear", "Reset the entire catalog and manifest")
+        help_table.add_row("--help", "Show full command menu")
+
+        console.print(Panel(help_table, title="[bold]Quick Start[/bold]", border_style="green", expand=False))
+
+def get_factory():
+    return EngineFactory()
+
+@app.command()
+def clear():
+    """
+    CLEARS the entire data-source registry, manifest, local files, AND PostgreSQL tables.
+    """
+    console.print(Panel(
+        "[bold red]⚠ CRITICAL WARNING ⚠[/bold red]\n\n"
+        "This command will [underline]PERMANENTLY DELETE[/underline]:\n"
+        "1. All Metadata in the SQLite catalog\n"
+        "2. All Sync History and Logs\n"
+        "3. All local Sample and YAML files\n"
+        "4. [blink]ALL ACTIVE DATA TABLES[/blink] in your PostgreSQL Warehouse\n\n"
+        "This action CANNOT be undone.",
+        title="DANGER ZONE",
+        border_style="bold red"
+    ))
+
+    if not typer.confirm("Are you absolutely sure you want to wipe the entire system?"):
+        console.print("[yellow]System reset aborted.[/yellow]")
+        return
+
+    console.print("\n[bold red]FINAL VERIFICATION REQUIRED[/bold red]")
+    if not typer.confirm("This is your last chance. Delete everything?"):
+        console.print("[yellow]System reset aborted. Your data is safe.[/yellow]")
+        return
+
+    with console.status("[bold red]Wiping all pipeline data and tables...", spinner="bouncingBar"):
+        factory = get_factory()
+        data_dir = factory.get_data_dir()
+        db = factory.get_db()
+        pg = factory.get_postgres_adapter()
+        
+        try:
+            # 1. Identify tables to drop (Surgical + Namespace Sweep)
+            tables_to_drop = set()
+            
+            # A. From Metadata
+            from src.engine.models import SchemaContract
+            try:
+                contracts = db.query(SchemaContract).all()
+                for c in contracts:
+                    tables_to_drop.add(c.target_table_name)
+            except:
+                pass
                 
-                # Logic for next suggested command
-                if raw_status == "DOWNLOADED":
-                    next_cmd = f"python3 main.py {ds_id} -s"
-                elif raw_status == "SAMPLED":
-                    next_cmd = f"python3 main.py {ds_id} -n"
-                elif raw_status == "NORMALIZATION_PROPOSED":
-                    next_path = f"data/schemas/{ds_id}_target_schema.json"
-                    next_cmd = f"Review {next_path} then -a"
-                elif raw_status == "READY_FOR_LOAD":
-                    next_cmd = "[bold green]COMPLETE[/bold green]"
-        else:
-            status_display = f"[{status_colors['PENDING']}]PENDING[/{status_colors['PENDING']}]"
-        
-        table.add_row(ds_id, status_display, ready, next_cmd)
+            # B. From Namespace Sweep (PostgreSQL tables starting with 'src_')
+            try:
+                sweep_query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE 'src_%'"
+                conn = pg._get_connection()
+                with conn.cursor() as cur:
+                    cur.execute(sweep_query)
+                    for row in cur.fetchall():
+                        tables_to_drop.add(row[0])
+            except Exception as e:
+                logger.warning(f"DB: Namespace sweep failed: {e}")
 
-    console.print("\n")
-    console.print(table)
-    console.print("\n[dim]Run 'python3 main.py --help' for all options.[/dim]")
-
-def run_pipeline():
-    parser = argparse.ArgumentParser(description="Elite Dangerous Data Pipeline")
-    # Positional dataset argument
-    parser.add_argument("dataset_pos", nargs='?', help="Dataset ID to process (positional)")
-    
-    # Flags with aliases
-    parser.add_argument("-d", "--dataset", help="Dataset ID from config to process (flag override)")
-    parser.add_argument("-u", "--url", help="Override Source URI (Download only)")
-    parser.add_argument("-t", "--dest", help="Override Local Destination Path (Download only)")
-    
-    # Analyzer Phases
-    parser.add_argument("-s", "--sample", action="store_true", help="Phase 1: Extract sample and raw schema")
-    parser.add_argument("-n", "--normalize", action="store_true", help="Phase 2: Propose normalization strategy")
-    parser.add_argument("-a", "--approve", action="store_true", help="Phase 4: Approve schema and cleanup")
-    parser.add_argument("-l", "--load", action="store_true", help="Phase 3: Load data into database")
-    
-    # Automated flow
-    parser.add_argument("-x", "--next", action="store_true", help="Auto-execute the next logical phase")
-    
-    # Status
-    parser.add_argument("--status", action="store_true", help="Display global project status dashboard")
-    parser.add_argument("--check", action="store_true", help="Verify infrastructure and database connectivity")
-    
-    # Lifecycle
-    parser.add_argument("--delete", metavar="DATASET_ID", help="Delete all artifacts for a specific dataset")
-    parser.add_argument("--clear", action="store_true", help="Global reset: Purge all data and the manifest")
-    
-    args = parser.parse_args()
-
-    config = load_config()
-    manifest_repo = LocalManifestRepository("data/manifest.json")
-    
-    # 0. Permission Check
-    verify_permissions(config.get("base_download_dir", "data"))
-
-    # Handle Infrastructure Check
-    if args.check:
-        console.print(Panel.fit("[bold blue]Infrastructure Verification[/bold blue]"))
-        
-        # 1. FS Check
-        console.print("Checking Filesystem: [bold green]OK[/bold green]")
-        
-        # 2. DB Check
-        console.print("Checking Database Connectivity...")
-        success, msg = ping_database()
-        if success:
-            console.print(f"Database Status: [bold green]ONLINE[/bold green] ({msg})")
-        else:
-            console.print(f"Database Status: [bold red]OFFLINE[/bold red]")
-            console.print(f"[dim]Reason: {msg}[/dim]")
-            console.print("\n[bold yellow]Action Required:[/bold yellow] Run [cyan].scripts/setup_db.sh[/cyan] to start the database container.")
-        return
-
-    # Handle Global Clear
-    if args.clear:
-        console.print(Panel.fit("[bold red]GLOBAL RESET REQUESTED[/bold red]"))
-        confirm = Prompt.ask("[bold red]WARNING:[/bold red] This will destroy ALL downloaded data, schemas, and the manifest. Type '[bold white]YES[/bold white]' to continue")
-        if confirm == "YES":
-            def remove_readonly(func, path, _):
-                """Error handler to remove read-only files."""
-                os.chmod(path, 0o660)
-                func(path)
-
-            for sub in ["downloads", "schemas", "samples"]:
-                path = Path(f"data/{sub}")
-                if path.exists():
-                    console.print(f"Clearing {path}...")
-                    shutil.rmtree(path, onerror=remove_readonly)
-                    path.mkdir()
-            # Reset manifest
-            with open("data/manifest.json", "w") as f:
-                f.write("{}")
-            console.print("[bold green]✓ System cleared successfully.[/bold green]")
-        else:
-            console.print("[dim]Operation cancelled.[/dim]")
-        return
-
-    # Handle Targeted Delete
-    if args.delete:
-        ds_id = args.delete
-        manifest = manifest_repo.get(ds_id)
-        if not manifest:
-            console.print(f"[bold red]Error:[/bold red] Dataset '{ds_id}' not found in manifest.")
-            return
+            # 2. Execute Drops
+            from psycopg2 import sql
+            for table_name in tables_to_drop:
+                logger.info(f"DB: Dropping table {table_name}")
+                pg.execute(sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(sql.Identifier(table_name)))
             
-        if Confirm.ask(f"Are you sure you want to delete all artifacts for dataset '[cyan]{ds_id}[/cyan]'?"):
-            if os.path.exists(manifest.local_filepath):
-                console.print(f"Removing download: {manifest.local_filepath}")
-                os.chmod(manifest.local_filepath, 0o660)
-                os.remove(manifest.local_filepath)
+            # 3. Reset Metadata Database (SQLite)
+            db_url = os.getenv("METADATA_DB_URL", "sqlite:///data/metadata.db")
+            if db_url.startswith("sqlite:///"):
+                db_path = Path(db_url.replace("sqlite:///", ""))
+                db.close()
+                factory.engine.dispose()
+                if db_path.exists():
+                    db_path.unlink()
+                from src.engine.models import Base
+                Base.metadata.create_all(factory.engine)
+            else:
+                from src.engine.models import Base
+                Base.metadata.drop_all(factory.engine)
+                Base.metadata.create_all(factory.engine)
             
-            if manifest.metadata.schema_filepath and os.path.exists(manifest.metadata.schema_filepath):
-                console.print(f"Removing schema: {manifest.metadata.schema_filepath}")
-                os.remove(manifest.metadata.schema_filepath)
-                
-            if manifest.metadata.sample_filepath and os.path.exists(manifest.metadata.sample_filepath):
-                console.print(f"Removing sample: {manifest.metadata.sample_filepath}")
-                os.remove(manifest.metadata.sample_filepath)
+            # 4. Reset Manifest
+            manifest_mgr = factory.get_manifest_manager()
+            manifest_mgr.save({"datasets": []})
             
-            target_path = f"data/schemas/{ds_id}_target_schema.json"
-            if os.path.exists(target_path):
-                console.print(f"Removing target schema: {target_path}")
-                os.remove(target_path)
+            # 5. Purge Directories
+            dirs_to_clear = ["samples", "downloads", "schemas"]
+            for d in dirs_to_clear:
+                dir_path = data_dir / d
+                if dir_path.exists():
+                    for item in dir_path.iterdir():
+                        if item.is_file():
+                            item.unlink()
+                        elif item.is_dir():
+                            shutil.rmtree(item)
+            
+            logger.warning("Full system reset (Metadata + Data Plane) completed.")
+            console.print(f"[bold green]Success![/bold green] System wiped. {len(tables_to_drop)} tables dropped.")
+            
+        except Exception as e:
+            console.print(f"[bold red]Error during reset:[/bold red] {str(e)}")
+            logger.exception("CLI: Clear command failed")
+        finally:
+            pg.close()
 
-            manifest_repo.delete(ds_id)
-            console.print(f"[bold green]✓ Dataset '{ds_id}' artifacts removed.[/bold green]")
-        return
+@app.command()
+@logger.catch
+def onboard(
+    name: str = typer.Argument(..., help="Human-readable name for the source"),
+    url: str = typer.Argument(..., help="The URL to download the data from"),
+    memory_limit: float = typer.Option(75.0, "--memory-limit", help="Memory usage percentage limit")
+):
+    """
+    Launches the interactive onboarding wizard for a new data source.
+    """
+    factory = get_factory()
+    db = factory.get_db()
+    manifest = factory.get_manifest_manager()
+    workflow = OnboardingWorkflow(db, manifest, factory.get_data_dir(), memory_limit=memory_limit)
 
-    # Resolve Dataset ID
-    # Priority: Positional > -d Flag > None
-    dataset_id = args.dataset_pos if args.dataset_pos else args.dataset
-    
-    # If no arguments or just --status, show dashboard and exit
-    if (len(sys.argv) <= 1 and not dataset_id) or args.status:
-        console.print(Panel.fit("[bold blue]Elite Dangerous Data Pipeline[/bold blue]", subtitle="Hexagonal Orchestrator"))
-        display_global_status(config, manifest_repo)
-        return
-
-    # If an action was requested but no dataset specified, check if we should default or error
-    if not dataset_id:
-        if args.next:
-            # For --next without a dataset, pick the first one from config that isn't complete
-            for ds in config.get("datasets", []):
-                m = manifest_repo.get(ds["id"])
-                if not m or not m.validation.is_human_approved:
-                    dataset_id = ds["id"]
-                    break
-            if not dataset_id:
-                console.print("[bold green]All datasets are complete![/bold green]")
-                return
-        else:
-            console.print("[bold red]Error:[/bold red] You must specify a dataset ID to perform this action.")
-            console.print("[dim]Example: python3 main.py spansh_systems_1day -s[/dim]")
-            return
-
-    target_dataset = next((d for d in config.get("datasets", []) if d["id"] == dataset_id), None)
-    if not target_dataset:
-        console.print(f"[bold red]Error:[/bold red] Dataset '{dataset_id}' not found in config.json")
-        return
-
-    # Initialize Services
-    downloader_adapter = HttpDownloaderAdapter()
-    analyzer_adapter = JsonAnalyzerAdapter()
-    
-    downloader_service = DownloaderService(manifest_repo, downloader_adapter)
-    analyzer_service = AnalyzerService(manifest_repo, analyzer_adapter)
-    loader_service = LoaderService(manifest_repo, PostgresAdapter())
-    norm_service = NormalizationService(console)
-
-    console.print(Panel.fit("[bold blue]Elite Dangerous Data Pipeline[/bold blue]", subtitle=dataset_id))
+    logger.info(f"CLI: Starting onboarding for {name}")
+    console.print(Panel(f"[bold blue]Initializing Onboarding (Streaming Mode)[/bold blue]\n[cyan]Source:[/cyan] {name}\n[cyan]URL:[/cyan] {url}", title="Phase A: Init"))
 
     try:
-        manifest = manifest_repo.get(dataset_id)
-        current_status = manifest.status if manifest else "PENDING"
+        # Step 1: Direct-to-Pandas Analysis
+        with console.status("[bold green]Streaming and Analyzing structure...", spinner="dots") as status:
+            def memory_heartbeat():
+                usage = workflow.guard.get_current_usage()
+                status.update(f"[bold green]Streaming & Analyzing... [dim]RAM: {usage.percent}% ({usage.used_mb:.1f}MB)[/dim]")
+                workflow.guard.check_memory()
+            
+            workflow.analyzer.memory_callback = memory_heartbeat
+            
+            # Create the IO Adapter bridge
+            stream_adapter = workflow.get_streaming_sample(url)
+            raw_schema = workflow.analyze_source(stream_adapter)
 
-        # Determine what to do
-        do_download = False
-        do_sample = args.sample
-        do_normalize = args.normalize
-        do_approve = args.approve
-        do_load = args.load
+        # Step 2: Discovery Table
+        console.print("\n[bold]Inferred Schema Discovery[/bold]")
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Field Path")
+        table.add_column("Type")
+        table.add_column("Required")
 
-        if args.next:
-            if current_status == "PENDING": do_download = True
-            elif current_status == "DOWNLOADED": do_sample = True
-            elif current_status == "SAMPLED": do_normalize = True
-            elif current_status == "NORMALIZATION_PROPOSED":
-                console.print(f"\n[bold yellow]Action Required:[/bold yellow] Please review [cyan]data/schemas/{dataset_id}_target_schema.json[/cyan] then run with -a")
-                return
-            elif current_status == "READY_FOR_LOAD":
-                console.print(f"\n[bold green]Success:[/bold green] {dataset_id} is already ready for loading.")
-                return
+        props = raw_schema.get("properties", {})
+        if not props and raw_schema.get("type") == "array":
+            props = raw_schema.get("items", {}).get("properties", {})
 
-        # Smart Chaining
-        if do_normalize and current_status not in ["SAMPLED", "NORMALIZATION_PROPOSED", "READY_FOR_LOAD"]:
-            do_sample = True
+        for field_name, details in props.items():
+            field_type = details.get("type", "unknown")
+            is_required = field_name in raw_schema.get("required", [])
+            table.add_row(str(field_name), str(field_type), "Yes" if is_required else "No")
+
+        console.print(table)
         
-        if (do_sample or do_normalize) and current_status == "PENDING":
-            do_download = True
-
-        # --- EXECUTION ---
-
-        # 1. Download
-        is_explicit_download = not any([args.sample, args.normalize, args.approve, args.next])
-        if do_download or (is_explicit_download and current_status == "PENDING"):
-            source_uri = args.url if args.url else target_dataset["source_uri"]
-            local_filepath = args.dest
-            console.print(f"\n[bold yellow]Step: Download[/bold yellow] [cyan]{dataset_id}[/cyan]")
-            manifest = downloader_service.download_dataset(dataset_id, source_uri, local_filepath)
-            if manifest.status == "DOWNLOADED":
-                console.print("[bold green]✓ Download Success![/bold green]")
-            else:
-                console.print(f"[bold blue]ℹ Info:[/bold blue] Dataset already downloaded and verified. Skipping.")
-            current_status = manifest.status
-        elif is_explicit_download and current_status != "PENDING":
-             console.print(f"\n[bold blue]ℹ Info:[/bold blue] Dataset [cyan]{dataset_id}[/cyan] is already {current_status}. Skipping download.")
-
-        # 2. Sample
-        if do_sample:
-            if current_status in ["SAMPLED", "NORMALIZATION_PROPOSED", "READY_FOR_LOAD"]:
-                console.print(f"\n[bold blue]ℹ Info:[/bold blue] Dataset is already sampled. Skipping.")
-            else:
-                console.print(f"\n[bold yellow]Step: Sample[/bold yellow] [cyan]{dataset_id}[/cyan]...")
-                manifest = analyzer_service.extract_sample(dataset_id)
-                console.print(f"[bold green]✓ Sample & Raw Schema Created[/bold green]")
-                current_status = manifest.status
-
-        # 3. Normalize
-        if do_normalize:
-            if current_status in ["NORMALIZATION_PROPOSED", "READY_FOR_LOAD"]:
-                console.print(f"\n[bold blue]ℹ Info:[/bold blue] Normalization already proposed. Skipping.")
-            else:
-                console.print(f"\n[bold yellow]Step: Normalize[/bold yellow] [cyan]{dataset_id}[/cyan]...")
-                with open(manifest.metadata.schema_filepath, "r") as f:
-                    raw_schema = json.load(f)
+        # Step 3: HITL
+        if typer.confirm("\n[bold cyan]Would you like to rename columns or refine the schema before saving?[/bold cyan]"):
+            yaml_path = workflow.prepare_hitl_yaml(name, raw_schema)
+            edited_content = typer.edit(filename=str(yaml_path))
+            
+            if edited_content:
+                with open(yaml_path, "w") as f:
+                    f.write(edited_content)
                 
-                target_schema = norm_service.propose_normalization(raw_schema)
-                target_path = f"data/schemas/{dataset_id}_target_schema.json"
-                with open(target_path, "w") as f:
-                    json.dump(target_schema, f, indent=4)
+                with console.status("[bold green]Finalizing registration...", spinner="check"):
+                    source = workflow.finalize_onboarding(name, url, yaml_path, raw_schema)
                 
-                norm_service.visualize_proposal(dataset_id, target_schema)
-                console.print(f"\n[bold yellow]Action Required:[/bold yellow] Review [cyan]{target_path}[/cyan].")
-                current_status = "NORMALIZATION_PROPOSED"
-
-        # 4. Approve
-        if do_approve:
-            if current_status == "READY_FOR_LOAD":
-                console.print(f"\n[bold blue]ℹ Info:[/bold blue] Dataset is already approved and ready for load.")
+                console.print(f"\n[bold green]Success![/bold green] Source [cyan]{name}[/cyan] registered.")
             else:
-                console.print(f"\n[bold yellow]Step: Approve[/bold yellow] [cyan]{dataset_id}[/cyan]...")
-                manifest = analyzer_service.approve_schema(dataset_id)
-                console.print(f"[bold green]✓ Schema Approved![/bold green]")
-                current_status = manifest.status
+                logger.warning(f"CLI: HITL Edit cancelled for {name}")
+                console.print("[yellow]No changes detected. Onboarding suspended.[/yellow]")
+        else:
+            if typer.confirm("Save with raw (un-edited) schema?"):
+                yaml_path = workflow.prepare_hitl_yaml(name, raw_schema)
+                source = workflow.finalize_onboarding(name, url, yaml_path, raw_schema)
+                console.print(f"\n[bold green]Success![/bold green] Source [cyan]{name}[/cyan] registered.")
 
-        # 5. Load
-        if do_load:
-            if current_status == "LOADED":
-                console.print(f"\n[bold blue]ℹ Info:[/bold blue] Dataset is already loaded.")
-            else:
-                # DB Check first
-                db_ok, db_msg = ping_database()
-                if not db_ok:
-                    raise RuntimeError(f"Database offline: {db_msg}")
-
-                console.print(f"\n[bold yellow]Step: Load to Database[/bold yellow] [cyan]{dataset_id}[/cyan]...")
-                manifest = loader_service.load_dataset(dataset_id)
-                console.print(f"[bold green]✓ Load Success![/bold green] Total rows: {manifest.metadata.estimated_rows}")
-                current_status = manifest.status
-
-        # Suggested Next Step
-        if current_status == "DOWNLOADED":
-            console.print(f"\n[bold yellow]Next Step:[/bold yellow] python3 main.py {dataset_id} -s")
-        elif current_status == "SAMPLED":
-            console.print(f"\n[bold yellow]Next Step:[/bold yellow] python3 main.py {dataset_id} -n")
-        elif current_status == "NORMALIZATION_PROPOSED":
-            console.print(f"\n[bold yellow]Next Step:[/bold yellow] python3 main.py {dataset_id} -a")
-        elif current_status == "READY_FOR_LOAD":
-            console.print(f"\n[bold yellow]Next Step:[/bold yellow] python3 main.py {dataset_id} -l")
-
+    except MemoryError as me:
+        console.print(f"\n[bold red]CRITICAL MEMORY HALT:[/bold red] {str(me)}")
+        logger.critical(f"CLI: Execution halted due to memory limits: {str(me)}")
     except Exception as e:
-        console.print(f"\n[bold red]Pipeline Error:[/bold red] {str(e)}")
+        console.print(f"[bold red]Error during onboarding:[/bold red] {str(e)}")
+        logger.exception("CLI: Unexpected error during onboarding")
+    finally:
+        db.close()
+
+@app.command()
+def migrate():
+    """
+    Synchronizes the Metadata Catalog to physical tables in PostgreSQL.
+    Checks for missing tables and performs Tier 2 DDL validation.
+    """
+    factory = get_factory()
+    db = factory.get_db()
+    pg = factory.get_postgres_adapter()
+    from src.engine.models import Source
+
+    sources = db.query(Source).filter_by(is_active=True).all()
+    
+    if not sources:
+        console.print("[yellow]No active sources found to migrate.[/yellow]")
+        db.close()
+        return
+
+    console.print(Panel("[bold blue]Starting Schema Migration[/bold blue]", subtitle="PostgreSQL Warehouse"))
+
+    try:
+        for s in sources:
+            if not s.contract:
+                console.print(f"[dim]Skipping {s.name}: No approved schema contract found.[/dim]")
+                continue
+
+            table_name = s.contract.target_table_name
+            if not pg.table_exists(table_name):
+                # Tier 2 Validation
+                console.print(f"Validating DDL for [cyan]{table_name}[/cyan]...")
+                if pg.validate_ddl(table_name, s.contract.approved_schema):
+                    console.print(f"Creating table: [cyan]{table_name}[/cyan]...")
+                    pg.create_table(table_name, s.contract.approved_schema)
+                    console.print(f"[green]✓ Table initialized.[/green]")
+                else:
+                    console.print(f"[bold red]FAILED:[/bold red] DDL validation failed for {table_name}. Check logs.")
+            else:
+                console.print(f"[dim]Table {table_name} already exists. Skipping.[/dim]")
+        
+        console.print("\n[bold green]Migration Complete![/bold green] Warehouse is in-sync with catalog.")
+    except Exception as e:
+        console.print(f"[bold red]Migration Error:[/bold red] {str(e)}")
+        logger.exception("CLI: Migration failed")
+    finally:
+        db.close()
+        pg.close()
+
+@app.command()
+@logger.catch
+def ingest(
+    name: str = typer.Argument(..., help="Name of the source to ingest"),
+    memory_limit: float = typer.Option(75.0, "--memory-limit", help="Memory usage percentage limit")
+):
+    """
+    Performs a high-speed ingestion with Tier 3 Bookend validation.
+    """
+    factory = get_factory()
+    db = factory.get_db()
+    pg = factory.get_postgres_adapter()
+    workflow = IngestionWorkflow(db, pg, memory_limit=memory_limit)
+    from src.engine.models import Source, SyncJob
+
+    console.print(Panel(f"[bold blue]Starting Ingestion[/bold blue]\n[cyan]Source:[/cyan] {name}", title="Phase C: Ingest"))
+
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TextColumn("[dim]{task.fields[mem]}"),
+            console=console
+        ) as progress:
+            task = progress.add_task(f"Streaming data from source...", total=None, mem="")
+            
+            def update_progress(rows):
+                usage = workflow.guard.get_current_usage()
+                mem_str = f"RAM: {usage.percent}% ({usage.used_mb:.1f}MB)"
+                progress.update(task, description=f"Ingested {rows:,} rows...", mem=mem_str)
+
+            rows_loaded = workflow.ingest_source(name, progress_callback=update_progress)
+            
+            # Check for SUSPECT status in SyncJob
+            last_job = db.query(SyncJob).filter_by(source_id=db.query(Source).filter_by(name=name).first().id).order_by(SyncJob.started_at.desc()).first()
+            
+            if last_job.status == "suspect":
+                progress.update(task, description=f"[bold yellow]Ingested {rows_loaded:,} rows (Suspect)", completed=100)
+                console.print(f"\n[bold yellow]WARNING:[/bold yellow] Row count mismatch detected! {last_job.error_message}")
+            else:
+                progress.update(task, description=f"Success! {rows_loaded:,} rows loaded.", completed=100)
+                console.print(f"\n[bold green]Ingestion Complete![/bold green] Source [cyan]{name}[/cyan] data is verified and queryable.")
+
+    except MemoryError as me:
+        console.print(f"\n[bold red]CRITICAL MEMORY HALT:[/bold red] {str(me)}")
+    except Exception as e:
+        console.print(f"[bold red]Error during ingestion:[/bold red] {str(e)}")
+        logger.exception(f"CLI: Ingestion failed for {name}")
+    finally:
+        db.close()
+        pg.close()
+
+@app.command()
+def list():
+    """
+    Lists all registered data sources in the metadata catalog.
+    """
+    factory = get_factory()
+    db = factory.get_db()
+    from src.engine.models import Source
+
+    sources = db.query(Source).all()
+
+    if not sources:
+        console.print("[yellow]No sources registered in the catalog.[/yellow]")
+        db.close()
+        return
+
+    table = Table(title="Metadata Catalog: Registered Sources")
+    table.add_column("ID", style="dim")
+    table.add_column("Name", style="cyan")
+    table.add_column("Active", style="green")
+    table.add_column("Target Table")
+
+    for s in sources:
+        target = s.contract.target_table_name if s.contract else "N/A"
+        table.add_row(
+            str(s.id),
+            s.name,
+            "Yes" if s.is_active else "No",
+            target
+        )
+
+    console.print(table)
+    db.close()
+
+@app.command()
+def status():
+    """
+    Displays a dashboard of the latest synchronization jobs and system health.
+    """
+    factory = get_factory()
+    db = factory.get_db()
+    from src.engine.models import SyncJob
+
+    # Get last 10 jobs
+    jobs = db.query(SyncJob).order_by(SyncJob.started_at.desc()).limit(10).all()
+
+    if not jobs:
+        console.print("[yellow]No job history found.[/yellow]")
+        db.close()
+        return
+
+    table = Table(title="System Health: Recent Sync Jobs")
+    table.add_column("Started", style="dim")
+    table.add_column("Source", style="cyan")
+    table.add_column("Status")
+    table.add_column("Rows", justify="right")
+    table.add_column("Payload Size")
+
+    for j in jobs:
+        status_style = "green" if j.status == "success" else "red" if j.status == "failed" else "yellow"
+        if j.status == "suspect": status_style = "bold yellow"
+        
+        source_name = j.source.name if j.source else "Unknown"
+        size_kb = f"{j.byte_count / 1024:.1f} KB" if j.byte_count else "0"
+        
+        table.add_row(
+            j.started_at.strftime("%Y-%m-%d %H:%M"),
+            source_name,
+            f"[{status_style}]{j.status}[/{status_style}]",
+            str(j.rows_processed),
+            size_kb
+        )
+
+    console.print(table)
+    db.close()
+
+@app.command()
+def delete(name: str):
+    """
+    Removes a data source and its associated metadata from the catalog.
+    """
+    factory = get_factory()
+    db = factory.get_db()
+    from src.engine.models import Source
+
+    source = db.query(Source).filter_by(name=name).first()
+    if not source:
+        console.print(f"[red]Source '{name}' not found.[/red]")
+        db.close()
+        return
+
+    if typer.confirm(f"Are you sure you want to delete source '{name}' and all its history?"):
+        # Surgical drop of target table if it exists
+        if source.contract:
+            pg = factory.get_postgres_adapter()
+            try:
+                table_name = source.contract.target_table_name
+                from psycopg2 import sql
+                query = sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(sql.Identifier(table_name))
+                pg.execute(query)
+                pg.close()
+            except:
+                pass
+        
+        db.delete(source)
+        db.commit()
+        console.print(f"[green]Source '{name}' and its PostgreSQL table deleted successfully.[/green]")
+    
+    db.close()
 
 if __name__ == "__main__":
-    run_pipeline()
+    app()

@@ -1,0 +1,9 @@
+{
+    "sampling": {
+        "max_rows": 1000,
+        "max_bytes": 10485760
+    },
+    "logging": {
+        "level": "INFO"
+    }
+}
