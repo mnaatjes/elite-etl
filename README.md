@@ -20,3 +20,10 @@ Build an ETL Pipeline for Elite Dangerous Data sourced from the Elite Dangerous 
   * **API Interface:** The pipeline exposes an API as the primary control surface.
   * **Error Handling:** The API provides robust error responses for failed operations.
   * **Logging:** A comprehensive logging mechanism captures operational telemetry and errors.
+
+## Key Architectural Decisions
+
+* **Hexagonal Architecture (Ports & Adapters):** Ensures API routing, core domain logic, and external databases are strictly decoupled.
+* **Directory Structure:** A `src/` layout explicitly separating `api/` (primary adapters), `domain/` (core business logic), and `infrastructure/` (secondary adapters).
+* **Layer Isolation (SRP):** Bronze, Silver, and Gold Medallion layers are treated as isolated domain services with strict dependency rules to uphold the Single Responsibility Principle.
+* **API Interface:** Utilizes RESTful endpoints over HTTP, asynchronous job execution with client polling for long-running ETL tasks, and standardized Pydantic error responses.

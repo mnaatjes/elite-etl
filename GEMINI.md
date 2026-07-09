@@ -1,8 +1,8 @@
 # Elite Dangerous Data Pipeline: AI Agent Directives
 
 ## Architecture State
-* **Current Phase:** Complete Overhaul / Refactor Branch.
-* **Environment:** Clean slate. The previous Medallion (Bronze/Silver/Gold) architecture and custom CLI have been completely removed.
+* **Current Phase:** Complete Overhaul / Refactor Branch. Rebuilding with Hexagonal Architecture.
+* **Environment:** Clean slate. The previous custom CLI has been completely removed.
 * **Remaining Infrastructure:** `docker-compose.yml`.
 
 ## Agent Operational Guidelines
@@ -28,3 +28,9 @@
     ---
     ```
 * **Updates:** Agents must update `last_updated_at` when modifying a document.
+
+### 3. Architectural Enforcement Mandates
+* **Hexagonal Architecture:** Agents MUST enforce Hexagonal Architecture (Ports & Adapters). Ensure core domain logic never imports from or depends on the `api` or `infrastructure` layers directly.
+* **Layer Isolation (SRP):** Treat the Medallion layers (Bronze, Silver, Gold) as strictly isolated domain services. Do not bleed their responsibilities.
+* **Directory Integrity:** Adhere strictly to the defined structure: `src/api/` for endpoints, `src/domain/` for pure logic, and `src/infrastructure/` for integrations.
+* **Reference:** Always consult `docs/explanation/api-architecture-design.md` before making structural changes.
