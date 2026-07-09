@@ -19,12 +19,18 @@ A professional pipeline follows a strict trajectory from external source to prod
 ### 2. The Bronze Layer (Raw Ingestion)
 *   **Prefix:** `raw_` or `src_` (Source).
 *   **State:** Load data into the database exactly as it arrives from the source (e.g., as raw `JSON` or `JSONB`) without altering its schema or fixing errors.
+*   **Tooling:** 
+    *   **`FastAPI` & `python-dlt`:** FastAPI triggers the ingestion job, while `python-dlt` streams the remote `JSON/JSON.GZ` data efficiently.
+    *   **`PostgreSQL`:** Acts as the raw landing storage.
 *   **Practices:** 
     *   **Idempotency & Versioning:** Check source metadata (e.g., HTTP `ETag`, `Last-Modified`) to ensure you only download new or changed data.
     *   **Audit Lineage:** Append metadata columns during insertion, such as `_ingested_at`, `_source_url`, and `_job_id`.
 
 ### 3. The Silver Layer (Transformation & Normalization)
 *   **State:** Decoupled transformation using dedicated tooling (like `dbt` or `python-dlt`). Data is cleaned, typed, and normalized. 
+*   **Tooling:**
+    *   **`python-dlt`:** Utilized to automatically infer schemas and unnest deeply nested JSON arrays into relational child tables.
+    *   **`PostgreSQL` & `SQLAlchemy`:** Executes the type casting, deduplication, and staging queries.
 *   **Stages within Silver:**
     *   **Staging (`stg_`):** The first layer of transformation. Data is extracted from raw JSON, columns are renamed to standard `snake_case`, and strings are cast to native database types.
     *   **Intermediate (`int_`):** Complex transformations, deduplication, and joining. These are temporary models built to support final production tables.
@@ -37,6 +43,9 @@ A professional pipeline follows a strict trajectory from external source to prod
 *   **State:** Fully verified, aggregated, and modeled data ready for analytics or application use.
     *   **Fact Tables (`fct_`):** Contain events, measurements, or metrics.
     *   **Dimension Tables (`dim_`):** Contain descriptive attributes or entities.
+*   **Tooling:**
+    *   **`PostgreSQL` / `dbt` / SQL:** Utilized to join Silver tables into final Fact and Dimension schemas using modular SQL.
+    *   **`PostgreSQL`:** Stores the final materialized views ensuring fast read performance.
 *   **Practices:**
     *   **Business Logic:** Apply complex business rules and aggregations.
     *   **Materialization:** Build these tables as materialized views or physical tables to guarantee fast read performance.
