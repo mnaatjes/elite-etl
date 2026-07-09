@@ -27,6 +27,8 @@ A professional pipeline follows a strict trajectory from external source to prod
         *   **Tier 1 (Network):** Check `ETag` and `Last-Modified` headers to prevent unnecessary downloads.
         *   **Tier 2 (Integrity):** Verify `Content-Length` to reject incomplete downloads.
         *   **Tier 3 (Cryptographic):** Generate an in-memory SHA-256 fingerprint during the `python-dlt` stream as the ultimate "Version ID".
+    *   **Partial Downloading (Testing):** Due to source files exceeding 100+ GB, the pipeline must support a configuration parameter (e.g., `limit_mb=10`) to partially download files during testing and development.
+    *   **Micro-Sampling (Schema Inference):** During onboarding, use a base sample size of `2MB` to ensure a full record is obtained for schema generation. If overridden via input, the `sample_size_mb` used must be recorded in the SQLite Registry for reproducibility.
     *   **Audit Lineage:** Append metadata columns during insertion, such as `_ingested_at`, `_source_url`, and `_job_id`.
 
 ### 3. The Silver Layer (Transformation & Normalization)
@@ -55,7 +57,7 @@ A professional pipeline follows a strict trajectory from external source to prod
 
 ## Orchestration & Governance (Cross-Cutting)
 *   **Scheduling:** Use orchestrators (Cron, Apache Airflow, Dagster) to manage dependencies and execution schedules.
-*   **Data Quality Testing:** Implement automated tests (e.g., checking for nulls in primary keys, row count validation) between each layer.
+*   **Data Quality & Unit Testing (`pytest`):** Implement automated tests using `pytest`. The `pytest` regime is strictly mandatory for every new package, service, model, and API endpoint. Additionally, implement data quality tests (e.g., checking for nulls in primary keys, row count validation) between each layer.
 *   **Alerting & Logging:** Maintain comprehensive logs and trigger alerts (via webhooks/Slack) if a pipeline fails or data quality drops.
 
 ## Naming Conventions & Transformation Syntax

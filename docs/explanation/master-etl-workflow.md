@@ -11,7 +11,7 @@ This document outlines the end-to-end trajectory of the Elite Dangerous ETL Pipe
 
 ## 1. Phase A: Registration & Onboarding (HITL)
 1.  **Request:** User submits a `POST /api/v1/sources/` with a download URI.
-2.  **Sampling:** The Bronze service fetches a micro-sample of the JSON.
+2.  **Sampling:** The Bronze service fetches a micro-sample of the JSON. A base sample size of `2MB` is used to capture a full record. If overridden, the chosen `sample_size_mb` is tracked in the registry.
 3.  **Schema Inference:** `genson` infers a schema from the sample.
 4.  **Off-Ramp (Error):** If the URI is invalid or unreadable, return `400 Bad Request` and log the failure.
 5.  **HITL Approval:** The inferred schema is stored in the SQLite Registry pending Human-in-the-Loop approval via `PUT /api/v1/sources/{id}/approve`.
@@ -20,7 +20,7 @@ This document outlines the end-to-end trajectory of the Elite Dangerous ETL Pipe
 1.  **Trigger:** A scheduled Cron job or a manual `POST /api/v1/pipeline/bronze/sync`.
 2.  **Tier 1 Check:** The Bronze service requests HTTP Headers from the source.
 3.  **Off-Ramp (Skip):** If the `ETag` matches the one in the SQLite Registry, execution halts (Data is unchanged).
-4.  **Streaming & Tier 2/3 Check:** `python-dlt` streams the JSON/JSON.GZ. Concurrently, it verifies `Content-Length` and generates a streaming `SHA-256` hash.
+4.  **Streaming & Tier 2/3 Check:** `python-dlt` streams the JSON/JSON.GZ. Concurrently, it verifies `Content-Length` and generates a streaming `SHA-256` hash. *(Note: During testing, a `limit_mb` parameter can be passed to partially download massive files).*
 5.  **Landing:** Data is loaded directly into `raw_<source_name>` in PostgreSQL. The `SHA-256` hash is committed to the Registry.
 6.  **Off-Ramp (Error):** If memory thresholds are breached, connection drops, or the `SHA-256`/`Content-Length` validation fails, the transaction rolls back.
 

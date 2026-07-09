@@ -37,3 +37,6 @@
     * `docs/explanation/master-etl-workflow.md`
     * `docs/explanation/etl-pipeline-practices.md`
     * `docs/explanation/api-architecture-design.md`
+
+### 4. Testing Mandates
+* **Mandatory Pytest Regime:** You MUST write and execute tests using `pytest` for every single new package, service, model, and part of the API that is added to the codebase. No production code is complete without its accompanying test coverage.

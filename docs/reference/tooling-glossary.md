@@ -35,6 +35,10 @@ This document outlines the recommended technology stack and specific tools ident
 *   **SQLAlchemy:** The Python SQL toolkit and Object Relational Mapper.
     *   *Project Fit:* Provides a unified interface to interact with both the SQLite registry/metadata store and the PostgreSQL warehouse if direct SQL commands are needed outside of `dlt`.
 
+### Testing Framework
+*   **pytest:** A mature full-featured Python testing tool that helps you write better programs.
+    *   *Project Fit:* Mandatory framework for all unit and integration tests across every new package, service, model, and API endpoint.
+
 ---
 
 ## 2. Docker Infrastructure
