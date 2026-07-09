@@ -27,3 +27,10 @@ Build an ETL Pipeline for Elite Dangerous Data sourced from the Elite Dangerous 
 * **Directory Structure:** A `src/` layout explicitly separating `api/` (primary adapters), `domain/` (core business logic), and `infrastructure/` (secondary adapters).
 * **Layer Isolation (SRP):** Bronze, Silver, and Gold Medallion layers are treated as isolated domain services with strict dependency rules to uphold the Single Responsibility Principle.
 * **API Interface:** Utilizes RESTful endpoints over HTTP, asynchronous job execution with client polling for long-running ETL tasks, and standardized Pydantic error responses.
+
+## Primary Design Documents
+
+The following documents define the core architecture and workflow of this pipeline. **They must be adhered to during all development:**
+* `docs/explanation/master-etl-workflow.md`
+* `docs/explanation/etl-pipeline-practices.md`
+* `docs/explanation/api-architecture-design.md`

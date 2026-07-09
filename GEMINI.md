@@ -33,4 +33,7 @@
 * **Hexagonal Architecture:** Agents MUST enforce Hexagonal Architecture (Ports & Adapters). Ensure core domain logic never imports from or depends on the `api` or `infrastructure` layers directly.
 * **Layer Isolation (SRP):** Treat the Medallion layers (Bronze, Silver, Gold) as strictly isolated domain services. Do not bleed their responsibilities.
 * **Directory Integrity:** Adhere strictly to the defined structure: `src/api/` for endpoints, `src/domain/` for pure logic, and `src/infrastructure/` for integrations.
-* **Reference:** Always consult `docs/explanation/api-architecture-design.md` before making structural changes.
+* **Design Document Adherence:** You MUST adhere strictly to the workflows, practices, and structures defined in the primary design documents. Always consult them before making architectural decisions:
+    * `docs/explanation/master-etl-workflow.md`
+    * `docs/explanation/etl-pipeline-practices.md`
+    * `docs/explanation/api-architecture-design.md`
