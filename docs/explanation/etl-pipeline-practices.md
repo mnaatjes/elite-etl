@@ -23,7 +23,10 @@ A professional pipeline follows a strict trajectory from external source to prod
     *   **`FastAPI` & `python-dlt`:** FastAPI triggers the ingestion job, while `python-dlt` streams the remote `JSON/JSON.GZ` data efficiently.
     *   **`PostgreSQL`:** Acts as the raw landing storage.
 *   **Practices:** 
-    *   **Idempotency & Versioning:** Check source metadata (e.g., HTTP `ETag`, `Last-Modified`) to ensure you only download new or changed data.
+    *   **Multi-Tiered Identity & Versioning:** 
+        *   **Tier 1 (Network):** Check `ETag` and `Last-Modified` headers to prevent unnecessary downloads.
+        *   **Tier 2 (Integrity):** Verify `Content-Length` to reject incomplete downloads.
+        *   **Tier 3 (Cryptographic):** Generate an in-memory SHA-256 fingerprint during the `python-dlt` stream as the ultimate "Version ID".
     *   **Audit Lineage:** Append metadata columns during insertion, such as `_ingested_at`, `_source_url`, and `_job_id`.
 
 ### 3. The Silver Layer (Transformation & Normalization)

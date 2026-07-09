@@ -18,11 +18,11 @@ This document outlines the end-to-end trajectory of the Elite Dangerous ETL Pipe
 
 ## 2. Phase B: Bronze Synchronization & Ingestion
 1.  **Trigger:** A scheduled Cron job or a manual `POST /api/v1/pipeline/bronze/sync`.
-2.  **Idempotency Check:** The Bronze service requests HTTP Headers from the source.
+2.  **Tier 1 Check:** The Bronze service requests HTTP Headers from the source.
 3.  **Off-Ramp (Skip):** If the `ETag` matches the one in the SQLite Registry, execution halts (Data is unchanged).
-4.  **Streaming:** `python-dlt` opens a streaming connection to the source JSON/JSON.GZ.
-5.  **Landing:** Data is loaded directly into `raw_<source_name>` in PostgreSQL.
-6.  **Off-Ramp (Error):** If memory thresholds are breached or connection drops, transaction rolls back, error is logged via `Loguru`, and `500 Internal Server Error` is registered for the job.
+4.  **Streaming & Tier 2/3 Check:** `python-dlt` streams the JSON/JSON.GZ. Concurrently, it verifies `Content-Length` and generates a streaming `SHA-256` hash.
+5.  **Landing:** Data is loaded directly into `raw_<source_name>` in PostgreSQL. The `SHA-256` hash is committed to the Registry.
+6.  **Off-Ramp (Error):** If memory thresholds are breached, connection drops, or the `SHA-256`/`Content-Length` validation fails, the transaction rolls back.
 
 ## 3. Phase C: Silver Normalization
 1.  **Trigger:** `POST /api/v1/pipeline/silver/normalize`.
@@ -61,10 +61,10 @@ graph TD
     %% Sync/Bronze
     API_Sync --> ETag{ETag Changed?}
     ETag -- No --> Halt([Halt: Unchanged])
-    ETag -- Yes --> Stream[Bronze: dlt Stream]
+    ETag -- Yes --> Stream[Bronze: dlt Stream + SHA256]
     Stream -->|Fetch| Source
     Stream -->|Load| Raw[(raw_ tables)]
-    Stream -- "Error/Timeout" --> Error_Log([Log Error & Abort])
+    Stream -- "Error/Mismatch" --> Error_Log([Log Error & Abort])
     
     %% Silver
     Raw --> Silver[Silver: dlt/dbt Normalize]
@@ -106,13 +106,13 @@ sequenceDiagram
     else ETag Differs
         Bronze_Domain->>Remote_Source: GET Data Stream (python-dlt)
         
-        alt Connection Fails
+        alt Connection Fails or Content-Length Mismatch
             Bronze_Domain->>SQLite_Registry: Log Error (Job Failed)
         else Stream Success
-            Remote_Source-->>Bronze_Domain: Yield JSON Chunks
+            Remote_Source-->>Bronze_Domain: Yield JSON Chunks & Calc SHA-256
             Bronze_Domain->>PostgreSQL: COPY into raw_table
             PostgreSQL-->>Bronze_Domain: Commit Success
-            Bronze_Domain->>SQLite_Registry: Update ETag & Log Success
+            Bronze_Domain->>SQLite_Registry: Update ETag, SHA-256 & Log Success
         end
     end
 ```
