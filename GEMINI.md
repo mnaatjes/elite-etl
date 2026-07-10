@@ -1,9 +1,9 @@
 # Elite Dangerous Data Pipeline: AI Agent Directives
 
 ## Architecture State
-* **Current Phase:** Complete Overhaul / Refactor Branch. Rebuilding with Hexagonal Architecture.
-* **Environment:** Clean slate. The previous custom CLI has been completely removed.
-* **Remaining Infrastructure:** `docker-compose.yml`.
+* **Current Phase:** Core ETL Pipeline Built. Hexagonal Architecture and Medallion phases (A-D) fully implemented, tested, and orchestrated via FastAPI.
+* **Environment:** Python virtual environment (`.venv`) with central `elite_etl` logging.
+* **Remaining Infrastructure:** PostgreSQL (Warehouse), SQLite (Registry), pgAdmin, and sqlite-web running via `docker-compose.yml`.
 
 ## Agent Operational Guidelines
 
@@ -40,3 +40,14 @@
 
 ### 4. Testing Mandates
 * **Mandatory Pytest Regime:** You MUST write and execute tests using `pytest` for every single new package, service, model, and part of the API that is added to the codebase. No production code is complete without its accompanying test coverage.
+
+### 5. Execution & Writing Mandate
+* **Approval Override:** When the user explicitly states "approved", "generate the code", or gives clear consent to a proposed design or model, agents are authorized to immediately bypass manual implementation recommendations and write the code directly to the filesystem using the appropriate tools.
+
+## 6. Next Session Context / Handoff Notes (July 9, 2026)
+* **ETL Pipeline Status:** The core Medallion ETL (Bronze -> Silver -> Gold) is **100% functional and tested** via Hexagonal Architecture and `FastAPI`. Data is successfully landing in PostgreSQL (`gold.dim_spansh_galaxy`).
+* **DLT Behavior:** We decided to embrace `python-dlt`'s auto-unnesting behavior in the Bronze layer. Silver acts as a structural flattening layer, and Gold builds the final analytics dimension.
+* **Separation of Concerns:** The ETL pipeline (`elite_etl`) is fully complete in its current scope. Do not add complex algorithms or graph traversal logic to it.
+* **Next Major Milestone:** The user intends to build a completely separate service (likely `elite_engine`) to execute complex graph traversal and pathfinding algorithms (e.g., A* routing).
+* **Architecture Strategy:** The `elite_engine` should query the Gold schemas in PostgreSQL to fetch spatial bounds or filtered subsets, pull that data into memory, and execute the heavy pathfinding algorithms locally (Fetch-and-Compute pattern).
+* **Data Context Reference:** See `docs/reference/spansh-data-pedigree.md` for crucial rules regarding data staleness, EDMC/EDDN crowdsourcing limitations, and differential dumps.

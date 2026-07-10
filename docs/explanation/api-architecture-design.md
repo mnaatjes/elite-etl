@@ -70,7 +70,7 @@ Because ETL operations are long-running, the API cannot be strictly synchronous.
 *   **Registry & Source Management:**
     *   `POST /api/v1/sources/` - Register a new data source (triggers sample & schema generation).
     *   `PUT /api/v1/sources/{id}/approve` - HITL (Human-in-the-loop) approval of a generated schema.
-    *   `PUT /api/v1/sources/{id}/schedule` - Set or update the cron scheduling integer.
+    *   `PUT /api/v1/sources/{id}/schedule` - Set or update the schedule interval (in hours).
 *   **Pipeline Operations:**
     *   `POST /api/v1/pipeline/bronze/sync` - Manually trigger a Bronze ingestion for a source.
     *   `POST /api/v1/pipeline/silver/normalize` - Trigger Silver layer normalization.

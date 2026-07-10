@@ -56,7 +56,7 @@ A professional pipeline follows a strict trajectory from external source to prod
     *   **Materialization:** Build these tables as materialized views or physical tables to guarantee fast read performance.
 
 ## Orchestration & Governance (Cross-Cutting)
-*   **Scheduling:** Use orchestrators (Cron, Apache Airflow, Dagster) to manage dependencies and execution schedules.
+*   **Scheduling:** Use orchestrators (Cron, Apache Airflow, Dagster) to manage dependencies and execution intervals (evaluated as integer hours).
 *   **Data Quality & Unit Testing (`pytest`):** Implement automated tests using `pytest`. The `pytest` regime is strictly mandatory for every new package, service, model, and API endpoint. Additionally, implement data quality tests (e.g., checking for nulls in primary keys, row count validation) between each layer.
 *   **Alerting & Logging:** Maintain comprehensive logs and trigger alerts (via webhooks/Slack) if a pipeline fails or data quality drops.
 

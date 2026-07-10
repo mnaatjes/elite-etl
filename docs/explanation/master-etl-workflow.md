@@ -17,7 +17,7 @@ This document outlines the end-to-end trajectory of the Elite Dangerous ETL Pipe
 5.  **HITL Approval:** The inferred schema is stored in the SQLite Registry pending Human-in-the-Loop approval via `PUT /api/v1/sources/{id}/approve`.
 
 ## 2. Phase B: Bronze Synchronization & Ingestion
-1.  **Trigger:** A scheduled Cron job or a manual `POST /api/v1/pipeline/bronze/sync`.
+1.  **Trigger:** A job scheduled by interval hours or a manual `POST /api/v1/pipeline/bronze/sync`.
 2.  **Tier 1 Check:** The Bronze service requests HTTP Headers from the source.
 3.  **Off-Ramp (Skip):** If the `ETag` matches the one in the SQLite Registry, execution halts (Data is unchanged).
 4.  **Streaming & Tier 2/3 Check:** `python-dlt` streams the JSON/JSON.GZ. Concurrently, it verifies `Content-Length` and generates a streaming `SHA-256` hash. *(Note: During testing, a `limit_mb` parameter can be passed to partially download massive files).*
