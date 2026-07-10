@@ -11,7 +11,8 @@ This document outlines the strategic sequence required to finalize the `elite_et
 
 ## Phase 1: Git Housekeeping & Stabilization
 Before a package can be built or decoupled, the repository must be stabilized and cleaned.
-*   **Audit Current State:** Ensure all Hexagonal Architecture components (Phases A-D) are fully committed and tested.
+*   **Audit Current State & Documentation Alignment:** Ensure all Hexagonal Architecture components (Phases A-D) are fully committed and tested. Compare the as-built code against the master design documents (`etl-pipeline-practices.md`, `master-etl-workflow.md`, `api-architecture-design.md`). 
+    *   *Professional Practice Note:* The working, as-built code is the Single Source of Truth. Do not create new documents to explain discrepancies. Instead, directly update the existing master documents to reflect the working reality. This prevents documentation bloat and reduces token usage.
 *   **Merge Strategy:** 
     1. Merge the current working development/buildout branch onto the main refactor branch.
     2. Perform a Pull-Request (PR) onto the true `main` branch.
@@ -20,7 +21,11 @@ Before a package can be built or decoupled, the repository must be stabilized an
 ## Phase 2: Decoupling & Agnosticizing (Domain Separation)
 Currently, Phases C and D (Silver/Gold) have hard-coded Elite Dangerous specifics. We must make the pipeline completely agnostic so it can process *any* dataset.
 *   **Branching:** Branch off from the newly stabilized `main` branch (e.g., `feature/agnostic-pipeline`).
-*   **Dynamic Transformers:** Rewrite `src/infrastructure/aggregators/` to accept dynamic SQL configurations (e.g., using `dbt` models or configurable JSON/YAML schemas) rather than hard-coding `stg_spansh_galaxy`.
+*   **Identify Coupling Points:** Review the infrastructure adapters (specifically `sql_transformer.py` and `sql_aggregator.py`). Locate all hard-coded references to specific data domains (e.g., table names like `raw_spansh_galaxy`, `stg_spansh_galaxy`, or specific column selections).
+*   **Decoupling Logic & Modules:** Engineer a configuration injection layer. The `SilverService` and `GoldService` must accept transformation schemas as external arguments, decoupling the Python execution logic from the SQL text.
+*   **Suggested Tooling:** 
+    *   **Jinja2:** For lightweight, fast dynamic SQL string templating inside Python.
+    *   **dbt-core:** For heavy, modular SQL transformations (via `dlt.helpers.dbt`), shifting transformation logic entirely out of Python into domain-specific `.sql` files.
 *   **Git Resolution:** Once the pipeline is successfully decoupled, repeat the PR process: merge back into `main` and delete the decoupling branch.
 
 ## Phase 3: Package Configuration (`pyproject.toml`)
