@@ -152,13 +152,6 @@ In software engineering, there is a strict separation between **Code** (version-
     ```
 *   **Execution:** The `sql_transformer.py` adapter reads the `.sql` files specified by the lineage pointer, renders any remaining Jinja2 variables if necessary, and executes them in sequence against the PostgreSQL database.
 
-### Architectural Blueprint: The Data Lineage Catalog (Metadata Module)
-To make the Interactive ELT Workflow function safely, the ETL pipeline requires a dedicated **Data Lineage Catalog**. This module tracks the pedigree of every dataset from URL to final Gold table, ensuring we never blindly guess table names.
-
-#### Core Objectives
-*   **Prevent Naming Collisions:** Explicitly track exactly what tables `dlt` generated.
-*   **Auditability:** Link every Postgres table row directly back to the SHA-256 hash of the origin JSON file.
-*   **UX/Onboarding:** Provide the API a precise list of tables to present to the user when requesting Silver/Gold SQL templates.
 
 #### OOP Design Structure
 The catalog will be implemented as a unified, encapsulated module within the Registry domain to adhere to the Single Responsibility Principle (SRP).
