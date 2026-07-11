@@ -36,32 +36,32 @@ sequenceDiagram
     autonumber
     actor User
     participant API as ETL API
-    participant DLT as Bronze Loader (python-dlt)
-    participant Catalog as SQLite Metadata Catalog
-    participant SQL as SQL Engine (Jinja2/psycopg2)
+    participant DLT as Bronze Loader
+    participant Catalog as Metadata Catalog
+    participant SQL as SQL Engine
 
     User->>API: Register Source URL & Trigger Bronze
     API->>DLT: Execute Extraction & Load
-    DLT-->>API: Returns LoadInfo (e.g., 26 new tables)
+    DLT-->>API: Returns LoadInfo (e.g. 26 new tables)
     API->>Catalog: Register generated Bronze tables
     API-->>User: Pause: Present Table Catalog to User
     
-    Note over User, API: The User authors a Jinja SQL Template using the cataloged Bronze tables.
+    Note over User,API: The User authors a SQL Template using the cataloged Bronze tables.
     
-    User->>API: Provide Silver Jinja Template (`spansh_populated_silver.sql`)
+    User->>API: Provide Silver Template
     API->>Catalog: Retrieve Bronze Table Lineage
     Catalog-->>API: Returns Array of Bronze Tables
-    API->>SQL: Render Jinja Template & Execute SQL
+    API->>SQL: Render Template & Execute SQL
     SQL-->>API: Silver Staging Tables Created
     API->>Catalog: Register generated Silver tables
     API-->>User: Pause: Silver Cleansing Complete
     
-    Note over User, API: The User authors a Gold Jinja SQL Template.
+    Note over User,API: The User authors a Gold SQL Template.
     
-    User->>API: Provide Gold Jinja Template
+    User->>API: Provide Gold Template
     API->>Catalog: Retrieve Silver Table Lineage
     Catalog-->>API: Returns Array of Silver Tables
-    API->>SQL: Render Jinja Template & Execute SQL
+    API->>SQL: Render Template & Execute SQL
     SQL-->>API: Gold Production Tables Created
     API->>Catalog: Register generated Gold tables
     API-->>User: Pipeline Complete
