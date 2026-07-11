@@ -76,6 +76,49 @@ To fully decouple the Silver layer using Jinja2 and the Data Lineage Catalog, th
 4.  **SQL Execution:** The transformer connects to PostgreSQL via `psycopg2` and executes the rendered query to create the cleansed Silver tables.
 5.  **Silver Lineage Update:** The Silver Service passes the newly created Silver table names back to the `Data Lineage Catalog` (layer="silver"). This ensures the Gold service has a perfect registry of the cleansed tables waiting for it.
 
+### Architectural Blueprint: The Human-in-the-Loop (HitL) API Handshake
+To execute the Silver and Gold workflows dynamically, the API and the User must exchange a specific "Handshake" where the API provides the raw schema context, and the User provides an array of SQL mapping instructions.
+
+#### 1. The Menu (API -> User)
+When Bronze completes, the user asks the API for the cataloged tables.
+*   **Endpoint:** `GET /bronze/catalog/{source_id}`
+*   **Response Payload:**
+    ```json
+    {
+      "source_id": "93eb2b95-adc6-412d-8c49-a18de9e71b4d",
+      "layer": "bronze",
+      "tables": [
+        "raw_spansh_populated__bodies",
+        "raw_spansh_populated__stations"
+      ]
+    }
+    ```
+    *(Note: In future iterations, this can be expanded to include exact column schemas).*
+
+#### 2. The Recipe (User -> API)
+The user reviews the Bronze tables and determines exactly how they want to join, cleanse, and split them into Silver tables. They send an array of SQL queries back to the API.
+*   **Endpoint:** `POST /silver/normalize/{source_id}`
+*   **Request Payload (The Array Approach):**
+    ```json
+    {
+      "transformations": [
+        {
+          "target_table": "stg_bodies",
+          "sql": "SELECT id, name AS body_name FROM bronze.raw_spansh_populated__bodies;"
+        },
+        {
+          "target_table": "stg_stations",
+          "sql": "SELECT id, type AS station_type FROM bronze.raw_spansh_populated__stations;"
+        }
+      ]
+    }
+    ```
+
+#### 3. Storage and Execution
+The pipeline is a "dumb" execution engine. When the API receives this array, it must store and execute it:
+*   **Storage:** The API writes each SQL string to persistent `.sql` files in the `data/sql_templates/{source_id}/silver/` directory. Storing these locally ensures they survive container reboots, can be re-run by CRON jobs automatically without user input, and provide an explicit trail for error logging.
+*   **Execution:** The `sql_transformer.py` adapter reads these `.sql` files, renders any remaining Jinja2 variables if necessary, and executes them in sequence against the PostgreSQL database.
+
 ### Architectural Blueprint: The Data Lineage Catalog (Metadata Module)
 To make the Interactive ELT Workflow function safely, the ETL pipeline requires a dedicated **Data Lineage Catalog**. This module tracks the pedigree of every dataset from URL to final Gold table, ensuring we never blindly guess table names.
 
