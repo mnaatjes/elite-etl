@@ -115,6 +115,7 @@ The user reviews the Bronze tables and determines exactly how they want to join,
 *   **Request Payload (The Array Approach):**
     ```json
     {
+      "dry_run": true,
       "transformations": [
         {
           "target_table": "stg_bodies",
@@ -128,7 +129,13 @@ The user reviews the Bronze tables and determines exactly how they want to join,
     }
     ```
 
-#### 3. Storage and Execution: Code vs. State
+#### 3. Server-Side Validation (Dry Run)
+Before storing or executing the SQL, the API must securely validate it in isolation to prevent crashing the system or leaving halfway-created junk tables. Client-side validation cannot detect missing columns or schema mismatches.
+*   **The Transactional Rollback:** When `dry_run: true` is passed, the API opens a PostgreSQL connection and explicitly triggers a `BEGIN;` transaction. It executes the user's SQL, capturing any database-level exceptions (e.g., `ERROR: column "x" does not exist`). 
+*   **Failure:** If PostgreSQL throws an error, the API intercepts it and returns a `400 Bad Request` containing the exact PostgreSQL error string to the user.
+*   **Success:** If the table successfully renders in memory, the API immediately executes a `ROLLBACK;`. This destroys the temporary state without committing anything to the active database. The API returns a `200 OK: Validation Passed`.
+
+#### 4. Storage and Execution: Code vs. State
 In software engineering, there is a strict separation between **Code** (version-controlled logic) and **State** (the database). The pipeline is a "dumb" execution engine. When the API receives this array, it must store and execute it using a **Reference Pointer** model:
 
 *   **Write Code to Filesystem:** The API saves the raw SQL string to persistent `.sql` files (e.g., `data/sql_templates/silver_spansh_populated_v1.sql`). Storing these locally ensures they survive container reboots, allows developers to get syntax highlighting/Git tracking, and provides an explicit trail for debugging.
