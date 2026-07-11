@@ -1,0 +1,73 @@
+import pytest
+from uuid import uuid4
+from src.domain.gold.service import GoldService
+from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase
+from src.domain.models.registry import DataSource
+
+class MockRegistry:
+    def __init__(self):
+        self.source = DataSource(
+            id=uuid4(),
+            name="test_source",
+            download_uri="http://test",
+            schedule_interval_hours=24
+        )
+        self.job = JobRecord(
+            id=uuid4(),
+            source_id=self.source.id,
+            phase=MedallionPhase.GOLD_AGGREGATE,
+            status=JobStatus.RUNNING
+        )
+        self.updated_status = None
+        
+    def create_job_record(self, source_id, phase):
+        return self.job
+        
+    def get_source(self, source_id):
+        if source_id == self.source.id:
+            return self.source
+        return None
+        
+    def update_job_status(self, job_id, status, error_log=None):
+        self.updated_status = status
+
+class MockAggregator:
+    def __init__(self, should_fail=False):
+        self.called = False
+        self.should_fail = should_fail
+        
+    def aggregate_table(self, source_name):
+        self.called = True
+        if self.should_fail:
+            raise Exception("Aggregation error")
+
+def test_gold_aggregate_success():
+    registry = MockRegistry()
+    aggregator = MockAggregator()
+    service = GoldService(registry, aggregator)
+    
+    job = service.aggregate_source(registry.source.id)
+    
+    assert job.id == registry.job.id
+    assert aggregator.called == True
+    assert registry.updated_status == JobStatus.SUCCESS
+
+def test_gold_aggregate_not_found():
+    registry = MockRegistry()
+    aggregator = MockAggregator()
+    service = GoldService(registry, aggregator)
+    
+    job = service.aggregate_source(uuid4())
+    
+    assert aggregator.called == False
+    assert registry.updated_status == JobStatus.FAILED
+
+def test_gold_aggregate_failure():
+    registry = MockRegistry()
+    aggregator = MockAggregator(should_fail=True)
+    service = GoldService(registry, aggregator)
+    
+    job = service.aggregate_source(registry.source.id)
+    
+    assert aggregator.called == True
+    assert registry.updated_status == JobStatus.FAILED

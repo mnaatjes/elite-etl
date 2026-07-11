@@ -1,0 +1,28 @@
+from enum import Enum
+from typing import Optional
+from datetime import datetime
+from uuid import UUID, uuid4
+from pydantic import BaseModel, Field
+
+class JobStatus(str, Enum):
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+class MedallionPhase(str, Enum):
+    BRONZE_SYNC = "bronze_sync"
+    SILVER_NORMALIZE = "silver_normalize"
+    GOLD_AGGREGATE = "gold_aggregate"
+
+class JobRecord(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    source_id: UUID
+    phase: MedallionPhase
+    status: JobStatus = Field(default=JobStatus.RUNNING)
+    error_log: Optional[str] = None
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
