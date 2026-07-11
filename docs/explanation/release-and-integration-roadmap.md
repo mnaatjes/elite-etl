@@ -28,6 +28,67 @@ Currently, Phases C and D (Silver/Gold) have hard-coded Elite Dangerous specific
     *   **dbt-core:** For heavy, modular SQL transformations (via `dlt.helpers.dbt`), shifting transformation logic entirely out of Python into domain-specific `.sql` files.
 *   **Git Resolution:** Once the pipeline is successfully decoupled, repeat the PR process: merge back into `main` and delete the decoupling branch.
 
+### Architectural Blueprint: The Interactive ELT Workflow
+Because the Bronze layer dynamically explodes raw JSON into unpredictable relational schemas (often dozens of nested tables), the ETL API cannot blindly proceed to Silver. It must pause and request explicit user mapping instructions. This separates automated extraction from human-driven transformation.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant API as ETL API
+    participant DLT as Bronze Loader (python-dlt)
+    participant Catalog as SQLite Metadata Catalog
+    participant SQL as SQL Engine (Jinja/dbt)
+
+    User->>API: Register Source URL & Trigger Bronze
+    API->>DLT: Execute Extraction & Load
+    DLT-->>API: Returns LoadInfo (e.g., 26 new tables)
+    API->>Catalog: Register dynamically generated tables
+    API-->>User: Pause: Present Table Catalog to User
+    
+    Note over User, API: The User reviews the cataloged Bronze tables.
+    
+    User->>API: Upload Silver SQL Template (JOINs & Cleanup)
+    API->>SQL: Inject template & Execute Silver transformations
+    SQL-->>API: Silver Staging Tables Created
+    API-->>User: Pause: Silver Cleansing Complete
+    
+    Note over User, API: The User reviews the clean Silver data.
+    
+    User->>API: Upload Gold SQL Template (Business Aggregations)
+    API->>SQL: Inject template & Execute Gold aggregations
+    SQL-->>API: Gold Production Tables Created
+    API-->>User: Pipeline Complete
+```
+
+### Architectural Blueprint: The Data Lineage Catalog (Metadata Module)
+To make the Interactive ELT Workflow function safely, the ETL pipeline requires a dedicated **Data Lineage Catalog**. This module tracks the pedigree of every dataset from URL to final Gold table, ensuring we never blindly guess table names.
+
+#### Core Objectives
+*   **Prevent Naming Collisions:** Explicitly track exactly what tables `dlt` generated.
+*   **Auditability:** Link every Postgres table row directly back to the SHA-256 hash of the origin JSON file.
+*   **UX/Onboarding:** Provide the API a precise list of tables to present to the user when requesting Silver/Gold SQL templates.
+
+#### OOP Design Structure
+The catalog will be implemented as a unified, encapsulated module within the Registry domain to adhere to the Single Responsibility Principle (SRP).
+
+1.  **The ORM Model (`SourceTable`)**
+    A new SQLite table mapping one-to-many from the `DataSource` registry.
+    *   `id`: UUID (Primary Key)
+    *   `source_id`: UUID (Foreign Key to `DataSource`)
+    *   `medallion_layer`: Enum (`bronze`, `silver`, `gold`)
+    *   `table_name`: String (e.g., `raw_spansh_populated__bodies`)
+    *   `row_count`: Integer
+    *   `created_at` / `updated_at`: Timestamps
+
+2.  **The Interface (`ILineageCatalog`)**
+    Defines the contract for cataloging data without tying it to SQLite.
+    *   `register_tables(source_id, layer, load_info_dict)`
+    *   `get_tables_for_source(source_id, layer)`
+
+3.  **The Implementation (`SqliteLineageCatalog`)**
+    The concrete class that parses the `python-dlt` `LoadInfo` object, extracts the dynamically generated table names, and persists them into the SQLite registry database.
+
 ## Phase 3: Package Configuration (`pyproject.toml`)
 To allow external applications to seamlessly import the ETL pipeline, the repository must be configured as a standard Python package.
 *   **Scaffold `pyproject.toml`:** Create the modern Python packaging configuration file in the repository root.

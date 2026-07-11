@@ -25,6 +25,22 @@ class RegistryDataSource(Base):
 
     # Relationships
     jobs: Mapped[list["RegistryJobRecord"]] = relationship(back_populates="source", cascade="all, delete-orphan")
+    source_tables: Mapped[list["RegistrySourceTable"]] = relationship(back_populates="source", cascade="all, delete-orphan")
+
+class RegistrySourceTable(Base):
+    __tablename__ = "source_tables"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("data_sources.id"))
+    medallion_layer: Mapped[str] = mapped_column(String, index=True)
+    table_name: Mapped[str] = mapped_column(String, index=True)
+    row_count: Mapped[int] = mapped_column(Integer, default=0)
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    source: Mapped["RegistryDataSource"] = relationship(back_populates="source_tables")
 
 class RegistryJobRecord(Base):
     __tablename__ = "job_records"

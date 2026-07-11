@@ -86,6 +86,20 @@ def inspect_tables():
         cur.execute(f"SELECT count(*) FROM {schema}.{table};")
         count = cur.fetchone()[0]
         print(f"Schema: {schema.ljust(10)} | Table: {table.ljust(35)} | Rows: {count}")
+        
+def inspect_catalog():
+    print("\n--- 4. Inspecting SQLite Data Lineage Catalog ---")
+    import sqlite3
+    try:
+        conn = sqlite3.connect("data/metadata.db")
+        cur = conn.cursor()
+        cur.execute("SELECT medallion_layer, table_name FROM source_tables ORDER BY table_name;")
+        rows = cur.fetchall()
+        print(f"\n[CATALOG INVENTORY: {len(rows)} Tables Registered]")
+        for layer, name in rows:
+            print(f"Layer: {layer.ljust(10)} | Table: {name}")
+    except Exception as e:
+        print(f"Could not inspect catalog: {e}")
 
 if __name__ == "__main__":
     clear_databases()
@@ -96,3 +110,4 @@ if __name__ == "__main__":
     
     run_pipeline()
     inspect_tables()
+    inspect_catalog()

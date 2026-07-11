@@ -8,7 +8,8 @@ from src.domain.bronze.service import BronzeService
 from src.domain.silver.service import SilverService
 from src.domain.gold.service import GoldService
 from src.domain.models.responses import AsyncJobResponse
-from src.api.dependencies import get_registry_repository
+from src.api.dependencies import get_registry_repository, get_lineage_catalog
+from src.domain.interfaces.catalog import ILineageCatalog
 from src.infrastructure.network.client import HttpxNetworkClient
 from src.infrastructure.loaders.dlt_runner import DltDataLoader
 from src.infrastructure.transformers.sql_transformer import PostgresSqlTransformer
@@ -16,10 +17,13 @@ from src.infrastructure.aggregators.sql_aggregator import PostgresSqlAggregator
 
 router = APIRouter()
 
-def get_bronze_service(repo: IRegistryRepository = Depends(get_registry_repository)) -> BronzeService:
+def get_bronze_service(
+    repo: IRegistryRepository = Depends(get_registry_repository),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+) -> BronzeService:
     network = HttpxNetworkClient()
     loader = DltDataLoader()
-    return BronzeService(registry=repo, network=network, loader=loader)
+    return BronzeService(registry=repo, network=network, loader=loader, catalog=catalog)
 
 class SyncRequest(BaseModel):
     limit_mb: Optional[int] = None

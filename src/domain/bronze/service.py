@@ -11,16 +11,20 @@ from src.infrastructure.logging import get_logger
 
 logger = get_logger("bronze.service")
 
+from src.domain.interfaces.catalog import ILineageCatalog
+
 class BronzeService:
     def __init__(
         self,
         registry: IRegistryRepository,
         network: INetworkClient,
-        loader: IDataLoader
+        loader: IDataLoader,
+        catalog: ILineageCatalog
     ):
         self.registry = registry
         self.network = network
         self.loader = loader
+        self.catalog = catalog
 
     def sync_source(self, source_id: UUID, limit_mb: Optional[int] = None) -> JobRecord:
         logger.info(f"Starting Bronze sync for source_id: {source_id}")
@@ -60,7 +64,10 @@ class BronzeService:
             # Load into Bronze
             table_name = f"raw_{source.name}"
             logger.info(f"Loading data into PostgreSQL table: {table_name}")
-            self.loader.load_stream(table_name, wrapped_stream)
+            load_info_dict = self.loader.load_stream(table_name, wrapped_stream)
+            
+            # Register tables in catalog
+            self.catalog.register_tables(source_id, "bronze", load_info_dict)
             
             # Update Registry with new metadata
             final_hash = sha256_hash.hexdigest()
