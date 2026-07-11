@@ -38,28 +38,43 @@ sequenceDiagram
     participant API as ETL API
     participant DLT as Bronze Loader (python-dlt)
     participant Catalog as SQLite Metadata Catalog
-    participant SQL as SQL Engine (Jinja/dbt)
+    participant SQL as SQL Engine (Jinja2/psycopg2)
 
     User->>API: Register Source URL & Trigger Bronze
     API->>DLT: Execute Extraction & Load
     DLT-->>API: Returns LoadInfo (e.g., 26 new tables)
-    API->>Catalog: Register dynamically generated tables
+    API->>Catalog: Register generated Bronze tables
     API-->>User: Pause: Present Table Catalog to User
     
-    Note over User, API: The User reviews the cataloged Bronze tables.
+    Note over User, API: The User authors a Jinja SQL Template using the cataloged Bronze tables.
     
-    User->>API: Upload Silver SQL Template (JOINs & Cleanup)
-    API->>SQL: Inject template & Execute Silver transformations
+    User->>API: Provide Silver Jinja Template (`spansh_populated_silver.sql`)
+    API->>Catalog: Retrieve Bronze Table Lineage
+    Catalog-->>API: Returns Array of Bronze Tables
+    API->>SQL: Render Jinja Template & Execute SQL
     SQL-->>API: Silver Staging Tables Created
+    API->>Catalog: Register generated Silver tables
     API-->>User: Pause: Silver Cleansing Complete
     
-    Note over User, API: The User reviews the clean Silver data.
+    Note over User, API: The User authors a Gold Jinja SQL Template.
     
-    User->>API: Upload Gold SQL Template (Business Aggregations)
-    API->>SQL: Inject template & Execute Gold aggregations
+    User->>API: Provide Gold Jinja Template
+    API->>Catalog: Retrieve Silver Table Lineage
+    Catalog-->>API: Returns Array of Silver Tables
+    API->>SQL: Render Jinja Template & Execute SQL
     SQL-->>API: Gold Production Tables Created
+    API->>Catalog: Register generated Gold tables
     API-->>User: Pipeline Complete
 ```
+
+### The Refactored Silver Workflow
+To fully decouple the Silver layer using Jinja2 and the Data Lineage Catalog, the pipeline executes the following sequence:
+
+1.  **Catalog Retrieval:** The Silver Service queries the `Data Lineage Catalog` in SQLite to retrieve the exact names of all Bronze tables generated for the given source (e.g., all 27 tables for `spansh_populated`).
+2.  **Template Resolution:** The `sql_transformer.py` adapter searches the `src/infrastructure/sql_templates/` directory for a user-provided Jinja `.sql` template matching the source name (e.g., `spansh_populated_silver.sql`).
+3.  **Template Rendering (Jinja2):** The transformer uses the Python `jinja2` library to inject variables (like the schema names and the cataloged Bronze tables) directly into the user's `.sql` template. This renders the template into an executable PostgreSQL query string.
+4.  **SQL Execution:** The transformer connects to PostgreSQL via `psycopg2` and executes the rendered query to create the cleansed Silver tables.
+5.  **Silver Lineage Update:** The Silver Service passes the newly created Silver table names back to the `Data Lineage Catalog` (layer="silver"). This ensures the Gold service has a perfect registry of the cleansed tables waiting for it.
 
 ### Architectural Blueprint: The Data Lineage Catalog (Metadata Module)
 To make the Interactive ELT Workflow function safely, the ETL pipeline requires a dedicated **Data Lineage Catalog**. This module tracks the pedigree of every dataset from URL to final Gold table, ensuring we never blindly guess table names.
