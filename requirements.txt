@@ -33,3 +33,5 @@ six==1.17.0
 SQLAlchemy==2.0.50
 typing_extensions==4.15.0
 uvicorn[standard]==0.34.0
+sqlglot==30.12.0
+sqlparse==0.4.4

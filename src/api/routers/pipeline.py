@@ -10,6 +10,8 @@ from src.domain.gold.service import GoldService
 from src.domain.models.responses import AsyncJobResponse
 from src.api.dependencies import get_registry_repository, get_lineage_catalog
 from src.domain.interfaces.catalog import ILineageCatalog
+from src.domain.lineage.models import HitLTemplate
+from src.domain.lineage.parser import validate_and_extract_edges, SecurityViolationError, BoundaryViolationError
 from src.infrastructure.network.client import HttpxNetworkClient
 from src.infrastructure.loaders.dlt_runner import DltDataLoader
 from src.infrastructure.transformers.sql_transformer import PostgresSqlTransformer
@@ -103,7 +105,19 @@ def trigger_silver_normalize(
     # Step 1: Server-Side Validation (Dry Run)
     try:
         for transform in payload.transformations:
+            # 1 & 2. Lexical and AST Validation
+            template = HitLTemplate(
+                source_pipeline=source.name,
+                target_layer="silver",
+                raw_sql_string=transform.sql,
+                submitted_by="admin"
+            )
+            edges = validate_and_extract_edges(template)
+            
+            # 4 & 5. Syntax and Semantic Validation
             service.transformer.validate_sql(transform.sql)
+    except (SecurityViolationError, BoundaryViolationError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"DAG Validation Error: {e}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
         
@@ -119,6 +133,16 @@ def trigger_silver_normalize(
         with open(file_path, "w") as f:
             f.write(transform.sql)
         catalog.update_template_path(source_id, "silver", transform.target_table, file_path)
+        
+        # Parse edges again to commit them to SQLite
+        template = HitLTemplate(
+            source_pipeline=source.name,
+            target_layer="silver",
+            raw_sql_string=transform.sql,
+            submitted_by="admin"
+        )
+        edges = validate_and_extract_edges(template)
+        catalog.create_edges(edges)
         
     # Step 3: Execution (Note: Currently triggers the hard-coded transformer until decoupled in Step 5)
     try:
@@ -150,7 +174,19 @@ def trigger_gold_aggregate(
     # Step 1: Server-Side Validation (Dry Run)
     try:
         for transform in payload.transformations:
+            # 1 & 2. Lexical and AST Validation
+            template = HitLTemplate(
+                source_pipeline=source.name,
+                target_layer="gold",
+                raw_sql_string=transform.sql,
+                submitted_by="admin"
+            )
+            edges = validate_and_extract_edges(template)
+            
+            # 4 & 5. Syntax and Semantic Validation
             service.aggregator.validate_sql(transform.sql)
+    except (SecurityViolationError, BoundaryViolationError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"DAG Validation Error: {e}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
         
@@ -166,6 +202,16 @@ def trigger_gold_aggregate(
         with open(file_path, "w") as f:
             f.write(transform.sql)
         catalog.update_template_path(source_id, "gold", transform.target_table, file_path)
+        
+        # Parse edges again to commit them to SQLite
+        template = HitLTemplate(
+            source_pipeline=source.name,
+            target_layer="gold",
+            raw_sql_string=transform.sql,
+            submitted_by="admin"
+        )
+        edges = validate_and_extract_edges(template)
+        catalog.create_edges(edges)
         
     # Step 3: Execution
     try:

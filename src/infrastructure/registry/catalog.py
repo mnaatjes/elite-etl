@@ -2,7 +2,7 @@ from typing import List
 from uuid import UUID
 from sqlalchemy.orm import Session
 from src.domain.interfaces.catalog import ILineageCatalog
-from src.infrastructure.registry.models import RegistrySourceTable
+from src.infrastructure.registry.models import RegistryLineageNode
 from src.infrastructure.logging import get_logger
 
 logger = get_logger("registry.catalog")
@@ -26,8 +26,7 @@ class SqliteLineageCatalog(ILineageCatalog):
                 t_name = t_data.get("table_name")
                 columns = t_data.get("columns")
                 
-            db_table = RegistrySourceTable(
-                source_id=source_id,
+            db_table = RegistryLineageNode(
                 medallion_layer=layer,
                 table_name=t_name,
                 columns_schema=columns,
@@ -40,17 +39,15 @@ class SqliteLineageCatalog(ILineageCatalog):
 
     def get_tables(self, source_id: UUID, layer: str) -> List[str]:
         """Retrieves exactly which tables belong to a specific source in a specific layer."""
-        tables = self.session.query(RegistrySourceTable).filter(
-            RegistrySourceTable.source_id == source_id,
-            RegistrySourceTable.medallion_layer == layer
+        tables = self.session.query(RegistryLineageNode).filter(
+            RegistryLineageNode.medallion_layer == layer
         ).all()
         return [t.table_name for t in tables]
         
     def get_catalog(self, source_id: UUID, layer: str) -> dict:
         """Retrieves the full catalog payload including schema introspection for the source tables."""
-        tables = self.session.query(RegistrySourceTable).filter(
-            RegistrySourceTable.source_id == source_id,
-            RegistrySourceTable.medallion_layer == layer
+        tables = self.session.query(RegistryLineageNode).filter(
+            RegistryLineageNode.medallion_layer == layer
         ).all()
         
         tables_list = []
@@ -68,17 +65,15 @@ class SqliteLineageCatalog(ILineageCatalog):
         
     def update_template_path(self, source_id: UUID, layer: str, table_name: str, file_path: str) -> None:
         """Upserts a cataloged table with the reference pointer to its defining SQL template."""
-        table = self.session.query(RegistrySourceTable).filter(
-            RegistrySourceTable.source_id == source_id,
-            RegistrySourceTable.medallion_layer == layer,
-            RegistrySourceTable.table_name == table_name
+        table = self.session.query(RegistryLineageNode).filter(
+            RegistryLineageNode.medallion_layer == layer,
+            RegistryLineageNode.table_name == table_name
         ).first()
         
         if table:
             table.transformation_template_path = file_path
         else:
-            table = RegistrySourceTable(
-                source_id=source_id,
+            table = RegistryLineageNode(
                 medallion_layer=layer,
                 table_name=table_name,
                 row_count=0,
@@ -91,25 +86,53 @@ class SqliteLineageCatalog(ILineageCatalog):
 
     def get_template_paths(self, source_id: UUID, layer: str) -> List[str]:
         """Retrieves all template paths registered for a specific source and layer."""
-        tables = self.session.query(RegistrySourceTable).filter(
-            RegistrySourceTable.source_id == source_id,
-            RegistrySourceTable.medallion_layer == layer,
-            RegistrySourceTable.transformation_template_path.isnot(None)
+        tables = self.session.query(RegistryLineageNode).filter(
+            RegistryLineageNode.medallion_layer == layer,
+            RegistryLineageNode.transformation_template_path.isnot(None)
         ).all()
         return [t.transformation_template_path for t in tables]
 
-    def get_lineage_graph(self, source_id: UUID) -> List[dict]:
-        tables = self.session.query(RegistrySourceTable).filter(
-            RegistrySourceTable.source_id == source_id
-        ).all()
+    def create_edges(self, edges: list) -> None:
+        from src.infrastructure.registry.models import RegistryLineageEdge
+        for edge in edges:
+            source_node = self.session.query(RegistryLineageNode).filter(RegistryLineageNode.table_name == edge.source_node_id).first()
+            target_node = self.session.query(RegistryLineageNode).filter(RegistryLineageNode.table_name == edge.target_node_id).first()
+            
+            if source_node and target_node:
+                db_edge = RegistryLineageEdge(
+                    source_node_id=source_node.id,
+                    target_node_id=target_node.id
+                )
+                self.session.add(db_edge)
+        self.session.commit()
+
+    def get_lineage_graph(self, source_id: UUID) -> dict:
+        from src.infrastructure.registry.models import RegistryLineageEdge
         
-        graph = []
-        for t in tables:
-            graph.append({
-                "layer": t.medallion_layer,
-                "table_name": t.table_name,
-                "template_path": t.transformation_template_path,
-                "row_count": t.row_count
+        # We query all nodes and edges to build the global DAG.
+        # Filtering strictly by source_id would break Gold nodes that converge.
+        db_nodes = self.session.query(RegistryLineageNode).all()
+        db_edges = self.session.query(RegistryLineageEdge).all()
+        
+        node_lookup = {str(n.id): n.table_name for n in db_nodes}
+        
+        nodes = []
+        for n in db_nodes:
+            nodes.append({
+                "id": str(n.id),
+                "table_name": n.table_name,
+                "layer": n.medallion_layer,
+                "template_path": n.transformation_template_path,
+                "row_count": n.row_count
             })
             
-        return graph
+        edges = []
+        for e in db_edges:
+            edges.append({
+                "source_node_id": str(e.source_node_id),
+                "target_node_id": str(e.target_node_id),
+                "source_table": node_lookup.get(str(e.source_node_id), "unknown"),
+                "target_table": node_lookup.get(str(e.target_node_id), "unknown")
+            })
+            
+        return {"nodes": nodes, "edges": edges}

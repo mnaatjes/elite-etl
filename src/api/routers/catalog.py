@@ -8,7 +8,7 @@ from src.infrastructure.database.inspector import get_active_tables
 
 router = APIRouter()
 
-@router.get("/lineage/{source_id}", response_model=List[Dict])
+@router.get("/lineage/{source_id}", response_model=dict)
 def get_lineage(
     source_id: UUID,
     catalog: ILineageCatalog = Depends(get_lineage_catalog)

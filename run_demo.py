@@ -152,7 +152,7 @@ def inspect_catalog():
     try:
         conn = sqlite3.connect("data/metadata.db")
         cur = conn.cursor()
-        cur.execute("SELECT medallion_layer, table_name FROM source_tables ORDER BY table_name;")
+        cur.execute("SELECT medallion_layer, table_name FROM lineage_nodes ORDER BY table_name;")
         rows = cur.fetchall()
         print(f"\n[CATALOG INVENTORY: {len(rows)} Tables Registered]")
         for layer, name in rows:
@@ -194,7 +194,9 @@ def verify_dashboard_endpoints(source_id: str):
         res_lineage = client.get(f"/api/v1/catalog/lineage/{source_id}")
         if res_lineage.status_code == 200:
             lineage_data = res_lineage.json()
-            print(f"  Found {len(lineage_data)} nodes in the lineage graph.")
+            nodes_count = len(lineage_data.get('nodes', []))
+            edges_count = len(lineage_data.get('edges', []))
+            print(f"  Found {nodes_count} nodes and {edges_count} edges in the lineage graph.")
         else:
             print(f"  Failed: {res_lineage.text}")
             

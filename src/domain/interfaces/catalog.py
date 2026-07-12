@@ -29,6 +29,6 @@ class ILineageCatalog(ABC):
         pass
         
     @abstractmethod
-    def get_lineage_graph(self, source_id: UUID) -> List[Dict]:
+    def get_lineage_graph(self, source_id: UUID) -> dict:
         """Returns the full dependency graph mapping of tables and templates for a source."""
         pass

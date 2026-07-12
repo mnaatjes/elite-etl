@@ -1,0 +1,1 @@
+# Gold Medallion SQL Templates

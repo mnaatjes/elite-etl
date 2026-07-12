@@ -44,11 +44,11 @@
 * **Approval Override:** When the user explicitly states "approved", "generate the code", or gives clear consent to a proposed design or model, agents are authorized to immediately bypass manual implementation recommendations and write the code directly to the filesystem using the appropriate tools.
 
 ## 6. Next Session Context / Handoff Notes (July 12, 2026)
-* **ETL Pipeline Status:** The core Medallion ETL (Phases A-D) is 100% functional. We have successfully implemented the **Human-in-the-Loop (HitL)** architecture and expanded the "Resource APIs" (`/sources`, `/jobs/{job_id}/logs`, `/catalog/search`, `/analytics`) to fully support the frontend dashboard workflows.
-* **Network & API Status:** The API `CORSMiddleware` has been updated to accept local network IPs (e.g., `192.168.1.146`) and the `uvicorn` server is correctly bound to `0.0.0.0`. 
-* **Data Lineage Architecture:** The current implementation tracks lineage via flat layer states (Option B). A comprehensive architectural migration plan for strict dependency tracking (True DAG via SQL parsing) has been designed and stored in `docs/explanation/true-dag-architecture-plan.md` for future consideration.
-* **Next Immediate Task (Dashboard Pivot):** Primary development focus MUST now shift to scaffolding the Vue 3 application inside `~/src/elite_dashboard/`. 
-* **Packaging TODOs (Release Phases 3-5):** When development returns to finalizing `elite_quick` for release, the following must be completed to make it a source-agnostic package:
+* **ETL Pipeline Status:** The core Medallion ETL is 100% functional. We have successfully replaced the flat layer states with the **True DAG Architecture**. The backend now enforces strict validation via an AST SQL Parser, explicitly mapping nodes and edges into a formal `LineageGraph` schema.
+* **Network & API Status:** The API `CORSMiddleware` accepts local network IPs and the `uvicorn` server binds to `0.0.0.0`. 
+* **Data Lineage Architecture:** Lineage is now serialized into SQLite (`RegistryLineageNode` and `RegistryLineageEdge`), making dependencies queryable. 
+* **Frontend Dashboard Status:** The Vue 3 application (`~/src/elite_dashboard/`) is successfully scaffolded and decoupled from pseudo-edges. It seamlessly connects to the backend and renders the D3 graph based on the strict AST JSON payloads.
+* **Next Immediate Task (Packaging TODOs):** Primary development focus MUST now shift to finalizing `elite_quick` for release as a source-agnostic package:
   1. **Phase 3:** Scaffold `pyproject.toml` to define package metadata and dependencies.
   2. **Phase 4:** Apply Semantic Versioning (`git tag -a v1.0.0`).
   3. **Phase 5:** Write the Integration Guide for external applications.

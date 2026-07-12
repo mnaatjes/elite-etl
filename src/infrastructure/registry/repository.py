@@ -7,7 +7,7 @@ from datetime import datetime
 from src.domain.interfaces.registry import IRegistryRepository
 from src.domain.models.registry import DataSource, DataSourceCreate, DataSourceUpdate, AnalyticsOverview
 from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase
-from src.infrastructure.registry.models import RegistryDataSource, RegistryJobRecord, RegistrySourceTable
+from src.infrastructure.registry.models import RegistryDataSource, RegistryJobRecord, RegistryLineageNode
 from src.infrastructure.logging import get_logger
 
 logger = get_logger("registry.repository")
@@ -88,8 +88,8 @@ class SQLiteRegistryRepository(IRegistryRepository):
 
     def get_global_analytics(self) -> AnalyticsOverview:
         total_sources = self.session.query(func.count(RegistryDataSource.id)).scalar() or 0
-        total_tables = self.session.query(func.count(RegistrySourceTable.id)).scalar() or 0
-        total_rows = self.session.query(func.sum(RegistrySourceTable.row_count)).scalar() or 0
+        total_tables = self.session.query(func.count(RegistryLineageNode.id)).scalar() or 0
+        total_rows = self.session.query(func.sum(RegistryLineageNode.row_count)).scalar() or 0
         
         successful_jobs = self.session.query(func.count(RegistryJobRecord.id)).filter(RegistryJobRecord.status == JobStatus.SUCCESS.value).scalar() or 0
         failed_jobs = self.session.query(func.count(RegistryJobRecord.id)).filter(RegistryJobRecord.status == JobStatus.FAILED.value).scalar() or 0
