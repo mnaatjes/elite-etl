@@ -53,16 +53,16 @@ graph TD
         G1[(dim_stations_enriched)]
     end
 
-    S1 -->|dlt sync (Auto Nodes)| B1
-    S1 -->|dlt sync (Auto Nodes)| B2
-    S2 -->|dlt sync (Auto Nodes)| B3
+    S1 -->|dlt sync: Auto Nodes| B1
+    S1 -->|dlt sync: Auto Nodes| B2
+    S2 -->|dlt sync: Auto Nodes| B3
 
-    B1 -->|HitL SQL (Parsed Edge)| SL1
-    B2 -->|HitL SQL (Parsed Edge)| SL2
-    B3 -->|HitL SQL (Parsed Edge)| SL3
+    B1 -->|HitL SQL: Parsed Edge| SL1
+    B2 -->|HitL SQL: Parsed Edge| SL2
+    B3 -->|HitL SQL: Parsed Edge| SL3
 
-    SL2 -->|HitL JOIN (Parsed Edges)| G1
-    SL3 -->|HitL JOIN (Parsed Edges)| G1
+    SL2 -->|HitL JOIN: Parsed Edges| G1
+    SL3 -->|HitL JOIN: Parsed Edges| G1
 ```
 
 ### Sequence Diagram: DAG Edge Generation
