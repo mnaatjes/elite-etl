@@ -112,7 +112,7 @@ sequenceDiagram
     Note over Admin, API: Human-in-the-Loop (HitL) Pause
     
     Admin->>API: POST /pipeline/silver/normalize/{source_id} (SQL Payload)
-    API->>DB: Dry Run Validation (BEGIN; EXECUTE; ROLLBACK;)
+    API->>DB: Dry Run Validation (BEGIN, EXECUTE, ROLLBACK)
     DB-->>API: Validation Success
     API->>Catalog: Save Template Lineage & Path
     API->>DB: Execute Validated SQL
@@ -120,7 +120,7 @@ sequenceDiagram
     API-->>Admin: 202 Accepted (job_id)
     
     Admin->>API: POST /pipeline/gold/aggregate/{source_id} (SQL Payload)
-    API->>DB: Dry Run Validation (BEGIN; EXECUTE; ROLLBACK;)
+    API->>DB: Dry Run Validation (BEGIN, EXECUTE, ROLLBACK)
     DB-->>API: Validation Success
     API->>Catalog: Save Template Lineage & Path
     API->>DB: Execute Validated SQL
