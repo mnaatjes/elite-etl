@@ -172,47 +172,31 @@ When a user submits a SQL template via the HitL dashboard, this service executes
 2. **AST Translation:** The service passes the string to `sqlglot`, which translates the raw text into an Abstract Syntax Tree.
 3. **Parent Extraction:** The service traverses the AST specifically looking for `exp.Table` nodes that are descendants of `FROM` or `JOIN` clauses, extracting a raw list of strings (e.g., `["bronze.raw_spansh_bodies"]`).
 4. **Boundary Validation:** The service cross-references the extracted parent strings against the target Medallion layer to enforce layer-specific rules (e.g., raising an exception if the target is `gold` but a parent string contains `bronze.`).
-5. **Object Generation:** The service packages the validated table names into structured Domain objects (e.g., a list of `LineageEdge(source="raw_spansh_bodies", target="stg_spansh_bodies")` dataclasses).
-6. **Registry Persistence:** The API takes these structured `LineageEdge` objects and hands them to the SQLite repository (`SqliteLineageCatalog`), which physically writes the relational map into the database, completing the DAG construction.
+5. **Object Generation:** The service packages the validated names into structured Domain models. 
 
----
-
-## 5. Architectural Alteration Plan
-
-To maintain backend simplicity while enabling relational tracking, we will implement **The Parser Route**. The backend will dynamically infer the DAG by parsing the user's raw SQL templates, requiring zero syntax changes from the administrator.
-
-### Phase 1: SQLite Registry Upgrades (Infrastructure)
-The database must be upgraded to store dependency edges.
-1. **Schema Migration:** Create a new `RegistryLineageEdge` table in SQLite with `source_table_id` and `target_table_id` columns.
-2. **Repository Update:** Update `SqliteLineageCatalog` to persist these edges when a SQL template is validated and saved.
-
-### Phase 2: The Parsing Implementation (Domain Logic)
-We will introduce `sqlglot` to parse the raw SQL without executing it.
-1. **Dependency Injection:** Add `sqlglot` to the backend dependencies (`pyproject.toml` / `requirements.txt`).
-2. **Parser Service:** Create a new domain service (e.g., `src/domain/lineage/parser.py`) that accepts a raw SQL string, walks the Abstract Syntax Tree (AST), and extracts all identifiers found in `FROM` and `JOIN` clauses.
-
-### Phase 3: API Pipeline Modifications (Primary Adapters)
-The normalization endpoints must build the graph before execution.
-1. **Intercept Validation:** Modify `POST /api/v1/pipeline/silver/normalize` and `POST /api/v1/pipeline/gold/aggregate`. During the "Dry Run" validation step, pass the user's SQL to the Parser Service.
-2. **Catalog Edges:** If validation passes, the API commits the parsed dependencies (edges) into the SQLite registry alongside the Node metadata.
-
-### Phase 4: Lineage Endpoint Overhaul
-The graph payload must conform to standard visualization expectations.
-1. **Graph Construction:** Refactor `GET /api/v1/catalog/lineage/{source_id}` to query both `RegistrySourceTable` (Nodes) and `RegistryLineageEdge` (Edges).
-2. **JSON Schema Update:** The endpoint will now return a strict DAG payload:
-   ```json
-   {
-     "graph": {
-       "nodes": [
-         {"id": "raw_spansh", "layer": "bronze"}
-       ],
-       "edges": [
-         {"source": "raw_spansh", "target": "stg_spansh"}
-       ]
-     }
-   }
+   *Example A: Simple Table-Level Lineage*
+   If the user submits `CREATE TABLE silver.stg_users AS SELECT * FROM bronze.raw_users;`, the parser extracts the table relationship:
+   ```python
+   @dataclass
+   class TableLineageEdge:
+       source_schema: str  # "bronze"
+       source_table: str   # "raw_users"
+       target_schema: str  # "silver"
+       target_table: str   # "stg_users"
    ```
 
-### Phase 5: Dashboard Integration
-1. **Update API Reference:** Document the new JSON schema in `elite_dashboard/docs/reference/api-endpoints.md`.
-2. **Vue NodeGraph:** Ensure the Vue component accurately maps the `graph.nodes` and `graph.edges` objects to render the deterministic data lineage map.
+   *Example B: Granular Column-Level Lineage*
+   If the user submits `CREATE TABLE silver.stg_users AS SELECT user_id, user_email AS email FROM bronze.raw_users;`, `sqlglot` can trace the exact column derivations (aliases, drops, and casts):
+   ```python
+   @dataclass
+   class ColumnLineageEdge:
+       source_schema: str   # "bronze"
+       source_table: str    # "raw_users"
+       source_column: str   # "user_email"
+       target_schema: str   # "silver"
+       target_table: str    # "stg_users"
+       target_column: str   # "email"
+       transformation: str  # "ALIAS"
+   ```
+
+6. **Registry Persistence:** The API takes these structured edge objects and hands them to the SQLite repository (`SqliteLineageCatalog`), which physically writes the relational map into the database, completing the DAG construction.
