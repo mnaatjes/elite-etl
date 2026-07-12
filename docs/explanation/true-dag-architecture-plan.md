@@ -162,7 +162,22 @@ To programmatically enforce these rules and achieve true DAG generation without 
 
 ---
 
-## 4. Architectural Alteration Plan
+## 4. The Data-Lineage Extractor Service
+
+While the parsing libraries handle the text interpretation, the backend must implement a custom Domain Service (e.g., `src/domain/lineage/parser.py`) to bridge the parser with our specific Medallion architecture. 
+
+When a user submits a SQL template via the HitL dashboard, this service executes the following sequence to build the DAG:
+
+1. **Ingestion:** The service receives the raw SQL string and the target Medallion layer (e.g., `silver`) from the API endpoint.
+2. **AST Translation:** The service passes the string to `sqlglot`, which translates the raw text into an Abstract Syntax Tree.
+3. **Parent Extraction:** The service traverses the AST specifically looking for `exp.Table` nodes that are descendants of `FROM` or `JOIN` clauses, extracting a raw list of strings (e.g., `["bronze.raw_spansh_bodies"]`).
+4. **Boundary Validation:** The service cross-references the extracted parent strings against the target Medallion layer to enforce layer-specific rules (e.g., raising an exception if the target is `gold` but a parent string contains `bronze.`).
+5. **Object Generation:** The service packages the validated table names into structured Domain objects (e.g., a list of `LineageEdge(source="raw_spansh_bodies", target="stg_spansh_bodies")` dataclasses).
+6. **Registry Persistence:** The API takes these structured `LineageEdge` objects and hands them to the SQLite repository (`SqliteLineageCatalog`), which physically writes the relational map into the database, completing the DAG construction.
+
+---
+
+## 5. Architectural Alteration Plan
 
 To maintain backend simplicity while enabling relational tracking, we will implement **The Parser Route**. The backend will dynamically infer the DAG by parsing the user's raw SQL templates, requiring zero syntax changes from the administrator.
 
