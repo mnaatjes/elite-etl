@@ -62,7 +62,7 @@ The pipeline operates as a state machine that orchestrates the flow of data acro
 
 ### 4.1. Conceptual Summary: The ETL State Machine
 
-1. **Source Registration (`POST /api/v1/pipeline/register`)**
+1. **Source Registration (`POST /api/v1/sources/`)**
    * **Action:** The system records a new external data source (URL) in the Lineage Catalog.
    * **State:** `pending`
 
@@ -93,7 +93,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant Catalog as SQLite Registry
 
-    Admin->>API: POST /pipeline/register (URL)
+    Admin->>API: POST /sources/ (URL)
     API->>Catalog: Register Source
     API-->>Admin: Return source_id
     
@@ -127,6 +127,28 @@ sequenceDiagram
     DB-->>API: Gold Tables Created
     API-->>Admin: 202 Accepted (job_id)
 ```
+
+### 4.3. Dashboard Query Endpoints (Resource APIs)
+
+To power a reactive administrative UI (`elite_dashboard`), the API must also serve as a comprehensive "Resource API" that exposes state and metadata for reading. The following endpoints represent the required data feeds for the UI:
+
+**1. Pipeline & Source Management (SQLite Queries)**
+*   `GET /api/v1/sources/` - Lists all registered data sources, their UUIDs, and current status. (Populates the main Dashboard list).
+*   `GET /api/v1/sources/{source_id}` - Retrieves the details, ETag, and last sync time for a specific source.
+*   `GET /api/v1/jobs/` - Lists the history of ETL executions (Success, Failed, Running). (Populates an "Execution Logs" or "Health" view).
+*   `GET /api/v1/jobs/{job_id}/logs` - Retrieves the specific error trace or log output for a single execution, preventing heavy payload bloat on list endpoints.
+
+**2. Data Lineage & Cataloging (SQLite + Postgres)**
+*   `GET /api/v1/catalog/lineage/{source_id}` - Returns the full dependency graph (which Bronze tables map to which Silver templates, and which Silver map to Gold).
+*   `GET /api/v1/catalog/tables?layer={bronze|silver|gold}` - Lists actual tables currently existing in the Postgres database, filterable by layer. (Useful for a "Warehouse Explorer" tab).
+
+**3. HitL & Transformation Management (Filesystem Queries)**
+*   `GET /api/v1/catalog/templates/{source_id}?layer=silver` - Retrieves the actual text of the `.sql` templates saved on the filesystem so the administrator can view or edit them directly within the dashboard's UI.
+
+**4. Advanced Dashboard Analytics & Configuration**
+*   `GET /api/v1/analytics/overview` - Aggregates total rows processed, data volumes, and pipeline success rates across all sources for high-level dashboard metrics.
+*   `PATCH /api/v1/sources/{source_id}` - Allows updating specific configuration parameters (such as `schedule_interval_hours` or credentials) for an active source without fully re-registering it.
+*   `GET /api/v1/catalog/search?q={query}` - Performs a global text search across PostgreSQL's `information_schema.columns` to locate specific tables, columns, or data points across all Medallion schemas simultaneously.
 
 ## 5. Segregation of Services
 

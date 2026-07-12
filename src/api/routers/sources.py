@@ -59,3 +59,15 @@ def approve_source(
         
     ds_update = DataSourceUpdate(state=SourceState.APPROVED)
     return repo.update_source(source_id, ds_update)
+
+@router.patch("/{source_id}", response_model=DataSource)
+def patch_source(
+    source_id: UUID,
+    update_data: DataSourceUpdate,
+    repo: IRegistryRepository = Depends(get_registry_repository)
+):
+    source = repo.get_source(source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    
+    return repo.update_source(source_id, update_data)

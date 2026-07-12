@@ -8,9 +8,11 @@
 ## Agent Operational Guidelines
 
 ### 1. Token Efficiency & Communication
-* **Token Conservation:** Use as few tokens as possible. Be stingy with tasking subagents.
-* **Brevity:** Keep responses extremely brief to reduce token spend. 
-* **Formatting:** Use bullet points whenever possible. Avoid conversational filler.
+* **Rule 1: Eradicate All Conversational Filler.** Never use pleasantries, greetings, sign-offs, or apologies. Begin every response immediately with the technical answer or action item.
+* **Rule 2: Strictly Enforce File-Based Code Edits.** Never output modified code blocks directly into the chat interface. If code needs to be updated, strictly use the `replace_file_content` or `multi_replace_file_content` tools to make the changes directly on the filesystem. Chat output regarding code changes must be limited to a bulleted list of the absolute filepaths modified and a 1-sentence summary of the logical change.
+* **Rule 3: Minimal Execution Reporting.** When authorized to execute a task, do not describe what you are about to do before doing it, and do not summarize what you just did in lengthy paragraphs. Inform the user in minimal, bullet point declarative statements strictly displaying the absolute filepaths of files read, written, or commands executed.
+* **Rule 4: The Dry-Run Verification Rule.** For complex tasks, always output a numbered list of the exact filepaths you intend to modify and a 1-sentence summary of the change. Halt and wait for user authorization ('Proceed') before utilizing any file-writing tools.
+* **Rule 5: Targeted File Reading.** When inspecting large files using `view_file`, avoid reading the entire file at once. Always use `grep_search` first to locate the relevant code, and then restrict `view_file` to a narrow line range. Always output the filepath being inspected.
 
 ### 2. Documentation Standards (`docs/`)
 * **Diátaxis Framework:** All documentation must adhere to the Diátaxis structure:
@@ -42,8 +44,13 @@
 * **Approval Override:** When the user explicitly states "approved", "generate the code", or gives clear consent to a proposed design or model, agents are authorized to immediately bypass manual implementation recommendations and write the code directly to the filesystem using the appropriate tools.
 
 ## 6. Next Session Context / Handoff Notes (July 11, 2026)
-* **ETL Pipeline Status:** The core Medallion ETL (Phases A-D) is 100% functional. We have successfully implemented the **Human-in-the-Loop (HitL)** architecture and decoupled the SQL Transformers (`PostgresSqlTransformer`, `PostgresSqlAggregator`). They now execute user-provided `.sql` templates stored on the filesystem, while lineage pointers are maintained in the SQLite catalog. The framework is now completely agnostic to Elite Dangerous specific data shapes. 
-* **Next Steps:** Proceed with "the rest of the decoupling" to ensure the `elite_etl` package is completely isolated and ready for the `v1.0.0` release.
+* **ETL Pipeline Status:** The core Medallion ETL (Phases A-D) is 100% functional. We have successfully implemented the **Human-in-the-Loop (HitL)** architecture. The system now includes robust "Resource APIs" (`/sources`, `/jobs`, `/catalog`) specifically built to feed the frontend dashboard.
+* **Next Immediate Backend Task:** You MUST add CORS middleware to `src/api/main.py` allowing `http://localhost:5173` before the frontend can connect.
+* **Dashboard Pivot:** Primary development focus is now shifting to scaffolding the Vue 3 application inside `~/src/elite_dashboard/`.
+* **Packaging TODOs (Release Phases 3-5):** When development returns to finalizing `elite_quick` for release, the following must be completed to make it a source-agnostic package:
+  1. **Phase 3:** Scaffold `pyproject.toml` to define package metadata and dependencies.
+  2. **Phase 4:** Apply Semantic Versioning (`git tag -a v1.0.0`).
+  3. **Phase 5:** Write the Integration Guide for external applications.
 * **Git Strategy:** Agents must adhere to the Git strategy defined in `docs/explanation/release-and-integration-roadmap.md` (merge to main, prune legacy branches, branch off for decoupling).
 * **Ecosystem Evolution:** We have formally separated the platform (`elite_etl` in `elite_quick`) from domain research (`elite_data_lab`) and the final product (`elite_mvp`). Do NOT write Elite Dangerous specific research code inside the generic ETL pipeline.
 * **AGY Conversation State:** The current active conversation UUID is `a3e62190-9082-4d92-ae36-ede51fcef8ee`. Use this UUID to restore context if the terminal session is interrupted.

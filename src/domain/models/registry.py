@@ -4,6 +4,14 @@ from datetime import datetime
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field, HttpUrl
 
+class AnalyticsOverview(BaseModel):
+    total_sources: int
+    total_tables: int
+    total_rows: int
+    successful_jobs: int
+    failed_jobs: int
+    running_jobs: int
+
 class SourceState(str, Enum):
     PENDING_HITL = "pending_hitl"
     APPROVED = "approved"

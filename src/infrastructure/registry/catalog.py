@@ -97,3 +97,19 @@ class SqliteLineageCatalog(ILineageCatalog):
             RegistrySourceTable.transformation_template_path.isnot(None)
         ).all()
         return [t.transformation_template_path for t in tables]
+
+    def get_lineage_graph(self, source_id: UUID) -> List[dict]:
+        tables = self.session.query(RegistrySourceTable).filter(
+            RegistrySourceTable.source_id == source_id
+        ).all()
+        
+        graph = []
+        for t in tables:
+            graph.append({
+                "layer": t.medallion_layer,
+                "table_name": t.table_name,
+                "template_path": t.transformation_template_path,
+                "row_count": t.row_count
+            })
+            
+        return graph

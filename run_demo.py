@@ -122,7 +122,9 @@ def run_pipeline():
             print(f"    Execution Result: {res_gold.json()}")
         else:
             print(f"    Execution Failed: {res_gold.text}")
-        
+            
+        return source_id
+
 def inspect_tables():
     print("\n--- 3. Inspecting PostgreSQL Tables ---")
     conn = psycopg2.connect(pg_url)
@@ -158,6 +160,89 @@ def inspect_catalog():
     except Exception as e:
         print(f"Could not inspect catalog: {e}")
 
+def verify_dashboard_endpoints(source_id: str):
+    print("\n--- 5. Verifying Dashboard UI Resource Endpoints ---")
+    with TestClient(app) as client:
+        # Sources
+        print("Fetching /api/v1/sources/ ...")
+        res_sources = client.get("/api/v1/sources/")
+        if res_sources.status_code == 200:
+            sources_data = res_sources.json()
+            print(f"  Found {len(sources_data)} registered sources.")
+        else:
+            print(f"  Failed: {res_sources.text}")
+        
+        # Jobs
+        print("Fetching /api/v1/jobs/ ...")
+        res_jobs = client.get("/api/v1/jobs/")
+        if res_jobs.status_code == 200:
+            jobs_data = res_jobs.json()
+            print(f"  Found {len(jobs_data)} job records.")
+            if jobs_data:
+                first_job_id = jobs_data[0]["id"]
+                print(f"Fetching logs for job {first_job_id} ...")
+                res_job_logs = client.get(f"/api/v1/jobs/{first_job_id}/logs")
+                if res_job_logs.status_code == 200:
+                    print("  Successfully retrieved specific job logs.")
+                else:
+                    print(f"  Failed to get job logs: {res_job_logs.text}")
+        else:
+            print(f"  Failed: {res_jobs.text}")
+            
+        # Lineage
+        print(f"Fetching /api/v1/catalog/lineage/{source_id} ...")
+        res_lineage = client.get(f"/api/v1/catalog/lineage/{source_id}")
+        if res_lineage.status_code == 200:
+            lineage_data = res_lineage.json()
+            print(f"  Found {len(lineage_data)} nodes in the lineage graph.")
+        else:
+            print(f"  Failed: {res_lineage.text}")
+            
+        # Tables
+        print("Fetching /api/v1/catalog/tables?layer=bronze ...")
+        res_tables = client.get("/api/v1/catalog/tables?layer=bronze")
+        if res_tables.status_code == 200:
+            tables_data = res_tables.json()
+            print(f"  Found {len(tables_data.get('tables', []))} active Bronze tables in PostgreSQL.")
+        else:
+            print(f"  Failed: {res_tables.text}")
+            
+        # Templates
+        print(f"Fetching /api/v1/catalog/templates/{source_id}?layer=silver ...")
+        res_templates = client.get(f"/api/v1/catalog/templates/{source_id}?layer=silver")
+        if res_templates.status_code == 200:
+            templates_data = res_templates.json()
+            print(f"  Found {len(templates_data.get('templates', []))} SQL templates on filesystem.")
+        else:
+            print(f"  Failed: {res_templates.text}")
+
+        # Analytics
+        print("Fetching /api/v1/analytics/overview ...")
+        res_analytics = client.get("/api/v1/analytics/overview")
+        if res_analytics.status_code == 200:
+            analytics_data = res_analytics.json()
+            print(f"  Analytics: {analytics_data}")
+        else:
+            print(f"  Failed: {res_analytics.text}")
+
+        # Search
+        print("Fetching /api/v1/catalog/search?q=spansh ...")
+        res_search = client.get("/api/v1/catalog/search?q=spansh")
+        if res_search.status_code == 200:
+            search_data = res_search.json()
+            print(f"  Found {len(search_data.get('results', []))} search results for 'spansh'.")
+        else:
+            print(f"  Failed: {res_search.text}")
+
+        # Patch Source
+        print(f"Patching /api/v1/sources/{source_id} ...")
+        res_patch = client.patch(f"/api/v1/sources/{source_id}", json={"schedule_interval_hours": 12})
+        if res_patch.status_code == 200:
+            patch_data = res_patch.json()
+            print(f"  Patched source interval to: {patch_data.get('schedule_interval_hours')}")
+        else:
+            print(f"  Failed: {res_patch.text}")
+
 if __name__ == "__main__":
     clear_databases()
     # The models might need to be recreated for sqlite
@@ -165,6 +250,8 @@ if __name__ == "__main__":
     from src.infrastructure.registry.database import init_db
     init_db()
     
-    run_pipeline()
-    inspect_tables()
-    inspect_catalog()
+    source_id = run_pipeline()
+    if source_id:
+        inspect_tables()
+        inspect_catalog()
+        verify_dashboard_endpoints(source_id)

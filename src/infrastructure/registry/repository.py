@@ -1,12 +1,13 @@
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime
 
 from src.domain.interfaces.registry import IRegistryRepository
-from src.domain.models.registry import DataSource, DataSourceCreate, DataSourceUpdate
+from src.domain.models.registry import DataSource, DataSourceCreate, DataSourceUpdate, AnalyticsOverview
 from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase
-from src.infrastructure.registry.models import RegistryDataSource, RegistryJobRecord
+from src.infrastructure.registry.models import RegistryDataSource, RegistryJobRecord, RegistrySourceTable
 from src.infrastructure.logging import get_logger
 
 logger = get_logger("registry.repository")
@@ -70,3 +71,35 @@ class SQLiteRegistryRepository(IRegistryRepository):
         self.session.commit()
         self.session.refresh(db_job)
         return JobRecord.model_validate(db_job)
+
+    def get_job(self, job_id: UUID) -> Optional[JobRecord]:
+        db_job = self.session.query(RegistryJobRecord).filter(RegistryJobRecord.id == job_id).first()
+        if db_job:
+            return JobRecord.model_validate(db_job)
+        return None
+
+    def list_jobs(self, source_id: Optional[UUID] = None, limit: int = 50) -> List[JobRecord]:
+        query = self.session.query(RegistryJobRecord)
+        if source_id:
+            query = query.filter(RegistryJobRecord.source_id == source_id)
+        query = query.order_by(RegistryJobRecord.started_at.desc()).limit(limit)
+        db_jobs = query.all()
+        return [JobRecord.model_validate(job) for job in db_jobs]
+
+    def get_global_analytics(self) -> AnalyticsOverview:
+        total_sources = self.session.query(func.count(RegistryDataSource.id)).scalar() or 0
+        total_tables = self.session.query(func.count(RegistrySourceTable.id)).scalar() or 0
+        total_rows = self.session.query(func.sum(RegistrySourceTable.row_count)).scalar() or 0
+        
+        successful_jobs = self.session.query(func.count(RegistryJobRecord.id)).filter(RegistryJobRecord.status == JobStatus.SUCCESS.value).scalar() or 0
+        failed_jobs = self.session.query(func.count(RegistryJobRecord.id)).filter(RegistryJobRecord.status == JobStatus.FAILED.value).scalar() or 0
+        running_jobs = self.session.query(func.count(RegistryJobRecord.id)).filter(RegistryJobRecord.status == JobStatus.RUNNING.value).scalar() or 0
+        
+        return AnalyticsOverview(
+            total_sources=total_sources,
+            total_tables=total_tables,
+            total_rows=total_rows,
+            successful_jobs=successful_jobs,
+            failed_jobs=failed_jobs,
+            running_jobs=running_jobs
+        )

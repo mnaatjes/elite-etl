@@ -27,3 +27,8 @@ class ILineageCatalog(ABC):
     def get_template_paths(self, source_id: UUID, layer: str) -> List[str]:
         """Retrieves all template paths registered for a specific source and layer."""
         pass
+        
+    @abstractmethod
+    def get_lineage_graph(self, source_id: UUID) -> List[Dict]:
+        """Returns the full dependency graph mapping of tables and templates for a source."""
+        pass
