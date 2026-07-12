@@ -48,7 +48,19 @@ class DltDataLoader(IDataLoader):
         )
         load_info = pipeline.run(dict_generator(), table_name=table_name)
         
-        # dlt load_info has complex structure, but pipeline.default_schema.tables holds the raw generated table names
-        # We will build a clean dict to return to the catalog
-        tables = [t for t in pipeline.default_schema.tables.keys() if not t.startswith("_dlt")]
-        return {"tables": tables}
+        # Extract tables and their column schemas directly from DLT's memory
+        tables_data = []
+        for t_name, t_schema in pipeline.default_schema.tables.items():
+            if not t_name.startswith("_dlt"):
+                columns = []
+                for col_name, col_meta in t_schema.get("columns", {}).items():
+                    columns.append({
+                        "name": col_name,
+                        "data_type": col_meta.get("data_type", "unknown")
+                    })
+                tables_data.append({
+                    "table_name": t_name,
+                    "columns": columns
+                })
+                
+        return {"tables": tables_data}

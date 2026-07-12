@@ -152,6 +152,23 @@ In software engineering, there is a strict separation between **Code** (version-
     ```
 *   **Execution:** The `sql_transformer.py` adapter reads the `.sql` files specified by the lineage pointer, renders any remaining Jinja2 variables if necessary, and executes them in sequence against the PostgreSQL database.
 
+### Implementation Sequence
+To translate this blueprint into the actual codebase, we will execute the following steps:
+
+1.  **Implement Schema Introspection (The Menu):** Modify the catalog service to query PostgreSQL's `information_schema.columns` and create the `GET /bronze/catalog/{source_id}` API endpoint.
+2.  **Scaffold Template Storage & Lineage Pointers:** Create the local `data/sql_templates/` directory and update the SQLite `SourceTable` ORM model to include the `transformation_template_path` reference pointer.
+3.  **Build the Server-Side Validator (Dry Run):** Implement a method in `sql_transformer.py` that wraps a `BEGIN;` and `ROLLBACK;` transaction block using `psycopg2` to catch and surface exact PostgreSQL exceptions.
+4.  **Implement the Silver API Endpoint (The Recipe):** Create the `POST /silver/normalize/{source_id}` endpoint with Pydantic models to accept the JSON array (including the `dry_run` flag). Wire it to trigger the validator, write the `.sql` files, and execute.
+5.  **Decouple the Transformers:** Rip out the hard-coded `SELECT *` string from the Bronze-to-Silver adapter. Rewrite it to read the specified `.sql` file from the filesystem and execute the raw string.
+6.  **Repeat for Gold:** Duplicate the decoupled endpoint and transformer logic for the `POST /gold/aggregate/{source_id}` phase.
+
+### Architectural Blueprint: The Data Lineage Catalog (Metadata Module)
+To make the Interactive ELT Workflow function safely, the ETL pipeline requires a dedicated **Data Lineage Catalog**. This module tracks the pedigree of every dataset from URL to final Gold table, ensuring we never blindly guess table names.
+
+#### Core Objectives
+*   **Prevent Naming Collisions:** Explicitly track exactly what tables `dlt` generated.
+*   **Auditability:** Link every Postgres table row directly back to the SHA-256 hash of the origin JSON file.
+*   **UX/Onboarding:** Provide the API a precise list of tables to present to the user when requesting Silver/Gold SQL templates.
 
 #### OOP Design Structure
 The catalog will be implemented as a unified, encapsulated module within the Registry domain to adhere to the Single Responsibility Principle (SRP).

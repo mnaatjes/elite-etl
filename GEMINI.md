@@ -41,8 +41,9 @@
 ### 5. Execution & Writing Mandate
 * **Approval Override:** When the user explicitly states "approved", "generate the code", or gives clear consent to a proposed design or model, agents are authorized to immediately bypass manual implementation recommendations and write the code directly to the filesystem using the appropriate tools.
 
-## 6. Next Session Context / Handoff Notes (July 10, 2026)
-* **ETL Pipeline Status:** The core Medallion ETL (Phases A-D) is 100% functional. However, the current goal is **Phase 2: Decoupling**. The `elite_etl` package must be refactored to be completely agnostic to Elite Dangerous specific data shapes (especially in the Silver/Gold SQL transformers) before it can be packaged and released as `v1.0.0`.
+## 6. Next Session Context / Handoff Notes (July 11, 2026)
+* **ETL Pipeline Status:** The core Medallion ETL (Phases A-D) is 100% functional. We have successfully implemented the **Human-in-the-Loop (HitL)** architecture and decoupled the SQL Transformers (`PostgresSqlTransformer`, `PostgresSqlAggregator`). They now execute user-provided `.sql` templates stored on the filesystem, while lineage pointers are maintained in the SQLite catalog. The framework is now completely agnostic to Elite Dangerous specific data shapes. 
+* **Next Steps:** Proceed with "the rest of the decoupling" to ensure the `elite_etl` package is completely isolated and ready for the `v1.0.0` release.
 * **Git Strategy:** Agents must adhere to the Git strategy defined in `docs/explanation/release-and-integration-roadmap.md` (merge to main, prune legacy branches, branch off for decoupling).
 * **Ecosystem Evolution:** We have formally separated the platform (`elite_etl` in `elite_quick`) from domain research (`elite_data_lab`) and the final product (`elite_mvp`). Do NOT write Elite Dangerous specific research code inside the generic ETL pipeline.
 * **AGY Conversation State:** The current active conversation UUID is `a3e62190-9082-4d92-ae36-ede51fcef8ee`. Use this UUID to restore context if the terminal session is interrupted.

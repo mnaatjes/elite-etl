@@ -12,38 +12,31 @@ class SqliteLineageCatalog(ILineageCatalog):
         self.session = db_session
 
     def register_tables(self, source_id: UUID, layer: str, load_info_dict: dict) -> None:
-        """Parses DLT LoadInfo and registers all dynamically generated tables."""
+        """Parses loader dict and registers all dynamically generated tables with their schemas."""
         logger.info(f"Cataloging generated tables for source {source_id} in layer {layer}")
         
-        # dlt load_info_dict contains 'load_packages', which is a list of packages
-        # Each package has a 'jobs' dictionary containing table names and lists of jobs
-        tables_seen = set()
+        tables_data = load_info_dict.get("tables", [])
         
-        # This is robust parsing of dlt LoadInfo asdict() format
-        for pkg in load_info_dict.get("load_packages", []):
-            jobs = pkg.get("jobs", {})
-            for job_category, table_jobs in jobs.items():
-                for table_name in table_jobs:
-                    # Ignore dlt internal tables if we only want business tables
-                    if not table_name.startswith("_dlt"):
-                        tables_seen.add(table_name)
-                        
-        if not tables_seen:
-            # Fallback for if we use a different loader format or direct pass
-            # Try to grab top-level "tables" list if we injected it
-            tables_seen = set(load_info_dict.get("tables", []))
-            
-        for t_name in tables_seen:
+        for t_data in tables_data:
+            if isinstance(t_data, str):
+                # Fallback if old format
+                t_name = t_data
+                columns = None
+            else:
+                t_name = t_data.get("table_name")
+                columns = t_data.get("columns")
+                
             db_table = RegistrySourceTable(
                 source_id=source_id,
                 medallion_layer=layer,
                 table_name=t_name,
-                row_count=0  # Row count would be parsed if available
+                columns_schema=columns,
+                row_count=0
             )
             self.session.add(db_table)
             
         self.session.commit()
-        logger.info(f"Successfully cataloged {len(tables_seen)} tables.")
+        logger.info(f"Successfully cataloged {len(tables_data)} tables.")
 
     def get_tables(self, source_id: UUID, layer: str) -> List[str]:
         """Retrieves exactly which tables belong to a specific source in a specific layer."""
@@ -52,3 +45,55 @@ class SqliteLineageCatalog(ILineageCatalog):
             RegistrySourceTable.medallion_layer == layer
         ).all()
         return [t.table_name for t in tables]
+        
+    def get_catalog(self, source_id: UUID, layer: str) -> dict:
+        """Retrieves the full catalog payload including schema introspection for the source tables."""
+        tables = self.session.query(RegistrySourceTable).filter(
+            RegistrySourceTable.source_id == source_id,
+            RegistrySourceTable.medallion_layer == layer
+        ).all()
+        
+        tables_list = []
+        for t in tables:
+            tables_list.append({
+                "table_name": t.table_name,
+                "columns": t.columns_schema or []
+            })
+            
+        return {
+            "source_id": str(source_id),
+            "layer": layer,
+            "tables": tables_list
+        }
+        
+    def update_template_path(self, source_id: UUID, layer: str, table_name: str, file_path: str) -> None:
+        """Upserts a cataloged table with the reference pointer to its defining SQL template."""
+        table = self.session.query(RegistrySourceTable).filter(
+            RegistrySourceTable.source_id == source_id,
+            RegistrySourceTable.medallion_layer == layer,
+            RegistrySourceTable.table_name == table_name
+        ).first()
+        
+        if table:
+            table.transformation_template_path = file_path
+        else:
+            table = RegistrySourceTable(
+                source_id=source_id,
+                medallion_layer=layer,
+                table_name=table_name,
+                row_count=0,
+                transformation_template_path=file_path
+            )
+            self.session.add(table)
+            
+        self.session.commit()
+        logger.info(f"Updated template pointer for {layer}.{table_name}")
+
+    def get_template_paths(self, source_id: UUID, layer: str) -> List[str]:
+        """Retrieves all template paths registered for a specific source and layer."""
+        tables = self.session.query(RegistrySourceTable).filter(
+            RegistrySourceTable.source_id == source_id,
+            RegistrySourceTable.medallion_layer == layer,
+            RegistrySourceTable.transformation_template_path.isnot(None)
+        ).all()
+        return [t.transformation_template_path for t in tables]

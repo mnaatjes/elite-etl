@@ -12,15 +12,11 @@ def clear_databases():
     print("--- 1. Clearing Databases ---")
     
     # SQLite
-    db_path = "elite_registry.db"
-    if os.path.exists(db_path):
-        os.remove(db_path)
-        print("Deleted SQLite registry file.")
-    else:
-        # try the default sqlmodel path
-        if os.path.exists("registry.db"):
-            os.remove("registry.db")
-            print("Deleted SQLite registry.db file.")
+    db_paths = ["elite_registry.db", "registry.db", "data/metadata.db"]
+    for db_path in db_paths:
+        if os.path.exists(db_path):
+            os.remove(db_path)
+            print(f"Deleted SQLite registry file: {db_path}")
             
     # PostgreSQL
     try:
@@ -58,13 +54,74 @@ def run_pipeline():
         print("Triggering Bronze Sync (limit 10MB)...")
         client.post(f"/api/v1/pipeline/bronze/sync/{source_id}", json={"limit_mb": 10})
         
-        # Silver
-        print("Triggering Silver Normalization...")
-        client.post(f"/api/v1/pipeline/silver/normalize/{source_id}")
+        # Bronze Catalog (Schema Introspection)
+        print("Retrieving Bronze Catalog with Schema Introspection...")
+        response = client.get(f"/api/v1/pipeline/bronze/catalog/{source_id}")
+        if response.status_code == 200:
+            catalog_data = response.json()
+            tables = catalog_data.get("tables", [])
+            print(f"Catalog returned {len(tables)} tables.")
+            if tables:
+                first_table = tables[0]
+                print(f"Sample Introspection for '{first_table.get('table_name')}':")
+                for col in first_table.get("columns", [])[:3]:  # print first 3 columns
+                    print(f"  - {col.get('name')} ({col.get('data_type')})")
+        else:
+            print(f"Failed to retrieve catalog: {response.text}")
+
+        
+        # Silver (HitL Dry Run & Execution)
+        print("Triggering Silver Normalization (Dry Run & Execution)...")
+        
+        # Test dry_run failure
+        print("  - Testing Invalid SQL Validation...")
+        bad_payload = {
+            "dry_run": True,
+            "transformations": [
+                {
+                    "target_table": "stg_spansh_populated",
+                    "sql": "SELECT non_existent_column FROM bronze.raw_spansh_populated;"
+                }
+            ]
+        }
+        res_bad = client.post(f"/api/v1/pipeline/silver/normalize/{source_id}", json=bad_payload)
+        print(f"    Expected Failure Result: {res_bad.status_code}")
+        
+        # Test actual execution
+        print("  - Executing Valid SQL Payload...")
+        good_payload = {
+            "dry_run": False,
+            "transformations": [
+                {
+                    "target_table": "stg_spansh_populated",
+                    "sql": "CREATE TABLE IF NOT EXISTS silver.stg_spansh_populated AS SELECT * FROM bronze.raw_spansh_populated;"
+                }
+            ]
+        }
+        res_good = client.post(f"/api/v1/pipeline/silver/normalize/{source_id}", json=good_payload)
+        if res_good.status_code == 202:
+            print(f"    Execution Result: {res_good.json()}")
+        else:
+            print(f"    Execution Failed: {res_good.text}")
+
         
         # Gold
         print("Triggering Gold Aggregation...")
-        client.post(f"/api/v1/pipeline/gold/aggregate/{source_id}")
+        
+        gold_payload = {
+            "dry_run": False,
+            "transformations": [
+                {
+                    "target_table": "dim_spansh_populated",
+                    "sql": "CREATE TABLE IF NOT EXISTS gold.dim_spansh_populated AS SELECT * FROM silver.stg_spansh_populated;"
+                }
+            ]
+        }
+        res_gold = client.post(f"/api/v1/pipeline/gold/aggregate/{source_id}", json=gold_payload)
+        if res_gold.status_code == 202:
+            print(f"    Execution Result: {res_gold.json()}")
+        else:
+            print(f"    Execution Failed: {res_gold.text}")
         
 def inspect_tables():
     print("\n--- 3. Inspecting PostgreSQL Tables ---")

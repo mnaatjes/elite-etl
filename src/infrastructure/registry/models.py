@@ -35,6 +35,8 @@ class RegistrySourceTable(Base):
     medallion_layer: Mapped[str] = mapped_column(String, index=True)
     table_name: Mapped[str] = mapped_column(String, index=True)
     row_count: Mapped[int] = mapped_column(Integer, default=0)
+    columns_schema: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    transformation_template_path: Mapped[str | None] = mapped_column(String, nullable=True)
     
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

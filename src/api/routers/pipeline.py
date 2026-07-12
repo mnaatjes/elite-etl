@@ -58,44 +58,121 @@ def trigger_bronze_sync(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-def get_silver_service(repo: IRegistryRepository = Depends(get_registry_repository)) -> SilverService:
-    transformer = PostgresSqlTransformer()
-    return SilverService(registry=repo, transformer=transformer)
+@router.get("/bronze/catalog/{source_id}")
+def get_bronze_catalog(
+    source_id: UUID,
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+):
+    """
+    Returns the schema introspection for a given source in the Bronze layer.
+    """
+    try:
+        return catalog.get_catalog(source_id, layer="bronze")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/silver/normalize/{source_id}", response_model=AsyncJobResponse, status_code=202)
+from typing import Optional, List
+import os
+
+class SqlTransformation(BaseModel):
+    target_table: str
+    sql: str
+
+class SqlTransformPayload(BaseModel):
+    dry_run: bool = False
+    transformations: List[SqlTransformation]
+
+def get_silver_service(
+    repo: IRegistryRepository = Depends(get_registry_repository),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+) -> SilverService:
+    transformer = PostgresSqlTransformer()
+    return SilverService(registry=repo, transformer=transformer, catalog=catalog)
+
+@router.post("/silver/normalize/{source_id}", response_model=dict, status_code=202)
 def trigger_silver_normalize(
     source_id: UUID,
-    service: SilverService = Depends(get_silver_service)
+    payload: SqlTransformPayload,
+    service: SilverService = Depends(get_silver_service),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
 ):
     source = service.registry.get_source(source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
         
+    # Step 1: Server-Side Validation (Dry Run)
+    try:
+        for transform in payload.transformations:
+            service.transformer.validate_sql(transform.sql)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    if payload.dry_run:
+        return {"message": "Validation Passed", "status": "dry_run_success"}
+        
+    # Step 2: Write Code to Filesystem & Update Reference Pointers
+    templates_dir = f"data/sql_templates/{source_id}/silver"
+    os.makedirs(templates_dir, exist_ok=True)
+    
+    for transform in payload.transformations:
+        file_path = f"{templates_dir}/{transform.target_table}.sql"
+        with open(file_path, "w") as f:
+            f.write(transform.sql)
+        catalog.update_template_path(source_id, "silver", transform.target_table, file_path)
+        
+    # Step 3: Execution (Note: Currently triggers the hard-coded transformer until decoupled in Step 5)
     try:
         job = service.normalize_source(source_id)
         if job.status.value == "failed":
             raise HTTPException(status_code=500, detail="Normalization failed. See job record.")
-        return AsyncJobResponse(message="Silver normalization completed", job_id=job.id)
+        return {"message": "Silver normalization completed", "job_id": str(job.id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-def get_gold_service(repo: IRegistryRepository = Depends(get_registry_repository)) -> GoldService:
+def get_gold_service(
+    repo: IRegistryRepository = Depends(get_registry_repository),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+) -> GoldService:
     aggregator = PostgresSqlAggregator()
-    return GoldService(registry=repo, aggregator=aggregator)
+    return GoldService(registry=repo, aggregator=aggregator, catalog=catalog)
 
-@router.post("/gold/aggregate/{source_id}", response_model=AsyncJobResponse, status_code=202)
+@router.post("/gold/aggregate/{source_id}", response_model=dict, status_code=202)
 def trigger_gold_aggregate(
     source_id: UUID,
-    service: GoldService = Depends(get_gold_service)
+    payload: SqlTransformPayload,
+    service: GoldService = Depends(get_gold_service),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
 ):
     source = service.registry.get_source(source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
         
+    # Step 1: Server-Side Validation (Dry Run)
+    try:
+        for transform in payload.transformations:
+            service.aggregator.validate_sql(transform.sql)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    if payload.dry_run:
+        return {"message": "Validation Passed", "status": "dry_run_success"}
+        
+    # Step 2: Write Code to Filesystem & Update Reference Pointers
+    templates_dir = f"data/sql_templates/{source_id}/gold"
+    os.makedirs(templates_dir, exist_ok=True)
+    
+    for transform in payload.transformations:
+        file_path = f"{templates_dir}/{transform.target_table}.sql"
+        with open(file_path, "w") as f:
+            f.write(transform.sql)
+        catalog.update_template_path(source_id, "gold", transform.target_table, file_path)
+        
+    # Step 3: Execution
     try:
         job = service.aggregate_source(source_id)
         if job.status.value == "failed":
             raise HTTPException(status_code=500, detail="Aggregation failed. See job record.")
-        return AsyncJobResponse(message="Gold aggregation completed", job_id=job.id)
+            
+        return {"message": "Gold aggregation completed", "job_id": str(job.id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

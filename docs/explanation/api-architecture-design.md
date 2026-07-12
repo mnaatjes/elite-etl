@@ -56,26 +56,77 @@ To prevent the pipeline from becoming a monolithic tangle, each Medallion layer 
     *   *Responsibility:* Triggering aggregations and building dimensional models.
     *   *Dependency Rule:* It strictly depends on the clean, normalized data in the Silver layer.
 
-## 4. API Interface Properties & Entry Points
+## 4. The ETL State Machine & As-Built API Workflow
 
-Because ETL operations are long-running, the API cannot be strictly synchronous. It must support asynchronous task dispatch and polling.
+The pipeline operates as a state machine that orchestrates the flow of data across the Medallion architecture, pausing at critical junctures for human authorization (Human-in-the-Loop).
 
-### Key API Properties
-*   **Protocol:** REST over HTTP/1.1 (JSON payloads).
-*   **Validation:** Strict input/output validation using Pydantic.
-*   **Error Standard:** Standardized HTTP error responses (e.g., 400 Bad Request, 422 Unprocessable Entity, 409 Conflict for duplicate sources).
-*   **Execution Model:** Asynchronous execution. Heavy ETL triggers will return a `202 Accepted` with a `job_id`, requiring the client to poll a status endpoint.
+### 4.1. Conceptual Summary: The ETL State Machine
 
-### Primary Entry Points
-*   **Registry & Source Management:**
-    *   `POST /api/v1/sources/` - Register a new data source (triggers sample & schema generation).
-    *   `PUT /api/v1/sources/{id}/approve` - HITL (Human-in-the-loop) approval of a generated schema.
-    *   `PUT /api/v1/sources/{id}/schedule` - Set or update the schedule interval (in hours).
-*   **Pipeline Operations:**
-    *   `POST /api/v1/pipeline/bronze/sync` - Manually trigger a Bronze ingestion for a source.
-    *   `POST /api/v1/pipeline/silver/normalize` - Trigger Silver layer normalization.
-*   **Telemetry:**
-    *   `GET /api/v1/jobs/{job_id}/status` - Check the status/logs of a running ETL job.
+1. **Source Registration (`POST /api/v1/pipeline/register`)**
+   * **Action:** The system records a new external data source (URL) in the Lineage Catalog.
+   * **State:** `pending`
+
+2. **Bronze Extraction & Load (`POST /api/v1/pipeline/bronze/sync/{source_id}`)**
+   * **Action:** The system automatically downloads the data, verifies checksums, and uses `python-dlt` to dynamically inject the raw data into PostgreSQL.
+   * **State:** `bronze_loaded`
+
+3. **HitL Interruption (`GET /api/v1/pipeline/bronze/catalog/{source_id}`)**
+   * **Action:** The automated pipeline *stops*. The system extracts the schema blueprint of every dynamically created Bronze table and hands it to the administrator via the API.
+   * **State:** `pending_hitl` (Waiting for Human)
+
+4. **Silver Normalization (`POST /api/v1/pipeline/silver/normalize/{source_id}`)**
+   * **Action:** The administrator submits custom SQL templates (`SqlTransformPayload`). The API performs a transactional `dry_run` (validation) to catch syntax or schema errors. If valid, the system saves the SQL to the filesystem, updates the lineage, and executes it to create the Silver tables.
+   * **State:** `silver_normalized`
+
+5. **Gold Aggregation (`POST /api/v1/pipeline/gold/aggregate/{source_id}`)**
+   * **Action:** Similar to Silver, the administrator submits SQL to aggregate the normalized Silver tables into production-ready Gold dimensional models. The API validates, saves, and executes.
+   * **State:** `gold_aggregated`
+
+### 4.2. API Workflow Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant API as ETL API
+    participant DLT as Bronze Loader (python-dlt)
+    participant DB as PostgreSQL
+    participant Catalog as SQLite Registry
+
+    Admin->>API: POST /pipeline/register (URL)
+    API->>Catalog: Register Source
+    API-->>Admin: Return source_id
+    
+    Admin->>API: POST /pipeline/bronze/sync/{source_id}
+    API->>DLT: Trigger Data Extraction
+    DLT->>DB: Dynamically Create & Load Raw Tables
+    DLT-->>API: Success
+    API->>Catalog: Update Status (bronze_loaded)
+    API-->>Admin: 202 Accepted (job_id)
+    
+    Admin->>API: GET /pipeline/bronze/catalog/{source_id}
+    API->>DB: Introspect Schema (Tables & Columns)
+    DB-->>API: Schema Metadata
+    API-->>Admin: Return Bronze Table Menu
+    
+    Note over Admin, API: Human-in-the-Loop (HitL) Pause
+    
+    Admin->>API: POST /pipeline/silver/normalize/{source_id} (SQL Payload)
+    API->>DB: Dry Run Validation (BEGIN; EXECUTE; ROLLBACK;)
+    DB-->>API: Validation Success
+    API->>Catalog: Save Template Lineage & Path
+    API->>DB: Execute Validated SQL
+    DB-->>API: Silver Tables Created
+    API-->>Admin: 202 Accepted (job_id)
+    
+    Admin->>API: POST /pipeline/gold/aggregate/{source_id} (SQL Payload)
+    API->>DB: Dry Run Validation (BEGIN; EXECUTE; ROLLBACK;)
+    DB-->>API: Validation Success
+    API->>Catalog: Save Template Lineage & Path
+    API->>DB: Execute Validated SQL
+    DB-->>API: Gold Tables Created
+    API-->>Admin: 202 Accepted (job_id)
+```
 
 ## 5. Segregation of Services
 

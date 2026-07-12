@@ -6,10 +6,13 @@ from src.infrastructure.logging import get_logger
 
 logger = get_logger("gold.service")
 
+from src.domain.interfaces.catalog import ILineageCatalog
+
 class GoldService:
-    def __init__(self, registry: IRegistryRepository, aggregator: IDataAggregator):
+    def __init__(self, registry: IRegistryRepository, aggregator: IDataAggregator, catalog: ILineageCatalog):
         self.registry = registry
         self.aggregator = aggregator
+        self.catalog = catalog
 
     def aggregate_source(self, source_id: UUID) -> JobRecord:
         logger.info(f"Starting Gold aggregation for source_id: {source_id}")
@@ -21,8 +24,14 @@ class GoldService:
                 logger.error(f"Source {source_id} not found in registry")
                 raise ValueError("Source not found")
                 
-            logger.info(f"Aggregating staging table for source: {source.name}")
-            self.aggregator.aggregate_table(source.name)
+            template_paths = self.catalog.get_template_paths(source_id, "gold")
+            if not template_paths:
+                logger.error(f"No Gold templates found in catalog for source: {source.name}")
+                raise ValueError("No aggregation templates registered for source")
+                
+            logger.info(f"Found {len(template_paths)} templates for source: {source.name}")
+            for path in template_paths:
+                self.aggregator.execute_template(path, "gold")
             
             self.registry.update_job_status(job.id, JobStatus.SUCCESS)
             logger.info(f"Gold aggregation successful for {source.name}")

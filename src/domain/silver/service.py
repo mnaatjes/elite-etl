@@ -6,10 +6,13 @@ from src.infrastructure.logging import get_logger
 
 logger = get_logger("silver.service")
 
+from src.domain.interfaces.catalog import ILineageCatalog
+
 class SilverService:
-    def __init__(self, registry: IRegistryRepository, transformer: IDataTransformer):
+    def __init__(self, registry: IRegistryRepository, transformer: IDataTransformer, catalog: ILineageCatalog):
         self.registry = registry
         self.transformer = transformer
+        self.catalog = catalog
 
     def normalize_source(self, source_id: UUID) -> JobRecord:
         logger.info(f"Starting Silver normalization for source_id: {source_id}")
@@ -21,8 +24,14 @@ class SilverService:
                 logger.error(f"Source {source_id} not found in registry")
                 raise ValueError("Source not found")
                 
-            logger.info(f"Normalizing raw table for source: {source.name}")
-            self.transformer.normalize_table(source.name)
+            template_paths = self.catalog.get_template_paths(source_id, "silver")
+            if not template_paths:
+                logger.error(f"No Silver templates found in catalog for source: {source.name}")
+                raise ValueError("No transformation templates registered for source")
+                
+            logger.info(f"Found {len(template_paths)} templates for source: {source.name}")
+            for path in template_paths:
+                self.transformer.execute_template(path)
             
             self.registry.update_job_status(job.id, JobStatus.SUCCESS)
             logger.info(f"Silver normalization successful for {source.name}")

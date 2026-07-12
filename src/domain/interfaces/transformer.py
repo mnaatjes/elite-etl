@@ -2,9 +2,15 @@ from abc import ABC, abstractmethod
 
 class IDataTransformer(ABC):
     @abstractmethod
-    def normalize_table(self, source_name: str) -> None:
+    def execute_template(self, template_path: str, layer: str = "silver") -> None:
         """
-        Normalizes a raw Bronze table into a Silver staging table.
-        Should handle un-nesting, snake_casing, and type casting.
+        Executes a SQL template from the filesystem.
+        """
+        pass
+        
+    @abstractmethod
+    def validate_sql(self, sql: str) -> None:
+        """
+        Validates a SQL string in a transaction.
         """
         pass
