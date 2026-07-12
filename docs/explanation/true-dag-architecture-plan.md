@@ -20,7 +20,76 @@ While the current Human-in-the-Loop (HitL) architecture tracks which tables exis
 
 ---
 
-## 2. Architectural Alteration Plan
+## 2. The Lifecycle of DAG Creation
+
+The DAG is dynamically constructed in memory and persisted to the registry incrementally as data moves through the Medallion architecture.
+
+1. **Bronze (The Roots):** The DAG strictly begins at the Bronze layer. When `python-dlt` extracts JSON from an external source (e.g., Spansh) and un-nests the arrays into PostgreSQL, the API automatically registers these raw tables as the **Root Nodes** of the DAG. No edges exist yet.
+2. **Silver (Forging Edges):** The user writes a SQL template to normalize a Bronze table into a Silver table. When submitted, the backend parses the SQL, identifies the `FROM` Bronze table, creates a new Silver **Node**, and explicitly records an **Edge** linking the Bronze parent to the Silver child.
+3. **Gold (Cross-Source Convergence):** The user writes a SQL template to aggregate data for reporting. This template may `JOIN` multiple Silver tables (even from entirely different external Sources). The backend parses this, creates the Gold **Node**, and records multiple **Edges** from the respective Silver parents, effectively merging isolated pipelines into a unified Global DAG.
+
+### Conceptual Flowchart
+
+```mermaid
+graph TD
+    subgraph External
+        S1[Source: Spansh API]
+        S2[Source: EDDN]
+    end
+
+    subgraph Bronze Layer
+        B1[(raw_spansh_bodies)]
+        B2[(raw_spansh_stations)]
+        B3[(raw_eddn_events)]
+    end
+
+    subgraph Silver Layer
+        SL1[(stg_spansh_bodies)]
+        SL2[(stg_spansh_stations)]
+        SL3[(stg_eddn_events)]
+    end
+
+    subgraph Gold Layer
+        G1[(dim_stations_enriched)]
+    end
+
+    S1 -->|dlt sync (Auto Nodes)| B1
+    S1 -->|dlt sync (Auto Nodes)| B2
+    S2 -->|dlt sync (Auto Nodes)| B3
+
+    B1 -->|HitL SQL (Parsed Edge)| SL1
+    B2 -->|HitL SQL (Parsed Edge)| SL2
+    B3 -->|HitL SQL (Parsed Edge)| SL3
+
+    SL2 -->|HitL JOIN (Parsed Edges)| G1
+    SL3 -->|HitL JOIN (Parsed Edges)| G1
+```
+
+### Sequence Diagram: DAG Edge Generation
+
+```mermaid
+sequenceDiagram
+    actor Admin
+    participant API as ETL API
+    participant Parser as SQLGlot Service
+    participant Registry as SQLite Catalog
+
+    Admin->>API: POST /pipeline/silver/normalize (SQL String)
+    Note over Admin, API: e.g., "CREATE TABLE stg_table AS SELECT * FROM raw_table"
+    
+    API->>Parser: Extract Dependencies(SQL)
+    Parser-->>API: ["raw_table"] (Identified Parent)
+    
+    API->>Registry: Create Node (stg_table, layer: silver)
+    API->>Registry: Create Edge (source: raw_table, target: stg_table)
+    Registry-->>API: Success
+    
+    API-->>Admin: 202 Accepted
+```
+
+---
+
+## 3. Architectural Alteration Plan
 
 To maintain backend simplicity while enabling relational tracking, we will implement **The Parser Route**. The backend will dynamically infer the DAG by parsing the user's raw SQL templates, requiring zero syntax changes from the administrator.
 
