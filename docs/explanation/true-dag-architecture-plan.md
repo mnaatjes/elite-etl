@@ -200,3 +200,48 @@ When a user submits a SQL template via the HitL dashboard, this service executes
    ```
 
 6. **Registry Persistence:** The API takes these structured edge objects and hands them to the SQLite repository (`SqliteLineageCatalog`), which physically writes the relational map into the database, completing the DAG construction.
+
+---
+
+## 5. The Complete DAG Domain Models
+
+To fully model the pipeline end-to-end and serialize it for the frontend visualization engine, the backend architecture requires exactly four primary domain objects.
+
+**1. `HitLTemplate` (The Input Object)**
+Before the parser can create edges, it needs a strongly-typed object representing the user's submission from the Vue dashboard.
+*   *Properties:* `source_pipeline` (e.g., "spansh"), `target_layer` (e.g., "silver"), `raw_sql_string`, `submitted_by`.
+
+**2. `LineageNode` (The Vertex)**
+Represents the physical data structure (a table or column) resting in the PostgreSQL database.
+*   *Properties:* `id` (e.g., `silver.stg_users`), `layer` (e.g., "silver"), `status` (e.g., "active", "failed_sync").
+
+**3. `LineageEdge` (The Relationship)**
+Represents the exact flow of data parsed from the `HitLTemplate` (as detailed in the Data-Lineage Extractor examples).
+*   *Properties:* `source_node_id`, `target_node_id`, `transformation_type` (e.g., "JOIN", "ALIAS", "CAST").
+
+**4. `LineageGraph` (The Output Wrapper)**
+When the Vue frontend calls `GET /api/v1/lineage`, the API cannot return loose arrays. It must return a unified Graph object containing the arrays of Nodes and Edges.
+*   *Properties:* `nodes: List[LineageNode]`, `edges: List[LineageEdge]`.
+
+---
+
+## 6. Infrastructure Alterations
+
+Transitioning to a true DAG requires a few targeted upgrades to our physical storage mechanisms to ensure ACID compliance and historical tracking.
+
+### 1. SQL Template Storage (Filesystem)
+Incoming SQL templates will **not** be stored as raw text in the database. Treating SQL as code is an industry standard that allows for git-tracking and IDE syntax highlighting.
+*   **Deterministic Filepath:** When the API accepts a payload, it will write the SQL string to a deterministic path on the filesystem: `src/domain/templates/{medallion_layer}/{target_table_name}.sql`
+
+### 2. SQLite Registry Consolidation
+The DAG edges and node metadata will exist exclusively within the existing SQLite database. Segregating the DAG into a separate database is prohibited, as it breaks Foreign Key constraints and risks desynchronization between pipeline jobs and the graph logic.
+
+### 3. Registry Model Updates
+The existing SQLAlchemy models in `src/infrastructure/registry/models.py` must be refactored to support the graph:
+
+*   **Renaming the Node Table:** The current `RegistrySourceTable` perfectly mirrors the concept of a vertex. It will be renamed to **`RegistryLineageNode`**. 
+    *   **Crucial Change:** We must remove the strict `source_id` foreign key from this table. Gold nodes converge from multiple sources, meaning a node cannot logically belong to a single source pipeline. The graph edges will natively trace the origin.
+*   **Attributing the SQL:** The `RegistryLineageNode` table already contains a `transformation_template_path` column. The API will insert the deterministic filepath (from Step 1) into this column, perfectly tying the physical SQL file to its representation in the DAG.
+*   **Creating the Edge Table:** We will create a new table, **`RegistryLineageEdge`**, specifically to hold the connections. It requires two primary properties:
+    *   `source_node_id` (ForeignKey pointing to `RegistryLineageNode.id`)
+    *   `target_node_id` (ForeignKey pointing to `RegistryLineageNode.id`)
