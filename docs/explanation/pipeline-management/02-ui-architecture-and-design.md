@@ -24,7 +24,8 @@ The Pipeline Management view is composed of several interactive web components d
 2.  **Offcanvas Authoring (HitL UI):** Prompted upon node creation or node click, this side-panel contains the SQL Editor for authoring data transformations for Silver and Gold layers.
 3.  **Payload Preview (SQL Manifest):** A modal button that opens a real-time, read-only audit record of the SQL generated across all nodes. *Note: This is strictly a compiled SQL Manifest, not a monolithic SQL script. It visually aggregates the isolated SQL templates to prove adherence to the Single Destination Mandate.*
 4.  **Debug Console (JSON Payload):** A developer-focused modal button that outputs the exact structured JSON DAG payload (nodes, edges, SQL strings) being actively constructed by the frontend.
-5.  **Unified Execution:** A centralized action to save the DAG (`PUT /api/v1/catalog/dag/...`) and trigger a full pipeline run (`POST /api/v1/pipeline/run/...`).
+5.  **Unified Execution ("Deploy & Execute Pipeline"):** The primary orchestration button. It is protected by a frontend State Gate that disables the button until minimum logical requirements are met (e.g., the DAG must contain at least one valid node in the Gold swim-lane).
+6.  **Deployment Logs Console:** A dedicated modal or fixed UI panel designed to catch and display any validation, security, or execution errors returned during the deployment process.
 
 ### 4. Graph Interactivity & Authoring
 *   **Node Creation:** Initiating "Add Node" requires the user to specify a table name and immediately opens the Offcanvas Authoring panel.
@@ -43,6 +44,63 @@ The Pipeline Management view is composed of several interactive web components d
     *   **Green:** Success / Up-to-date.
     *   **Red:** Failed execution / Error.
     *   **Yellow/Orange:** Stale (upstream data has changed, but this node hasn't been updated to reflect it).
+
+### 6. The Deployment Validation Pipeline
+When a user clicks the "Deploy & Execute Pipeline" button, a rigorous sequence of validations and transactions occurs. If triggered manually by this button, the orchestrator will bypass the configured `interval` schedule and execute the entire DAG (Bronze -> Silver -> Gold) immediately and sequentially. Automated background runs will strictly adhere to the `interval` schedule.
+
+The deployment sequence follows these mandatory protections:
+1.  **Frontend State Gate:** The button remains physically disabled (`disabled` attribute) until the DAG contains at least one node in the Gold swim-lane, and no nodes have empty SQL templates or disconnected edges.
+2.  **Lexical Security Scan (HitL Rules):** The backend intercepts the payload and scans all SQL strings against the prohibited operations (`DROP`, `DELETE`, `GRANT`, etc.) outlined in the HitL Rulesets.
+3.  **Anti-Injection & Sanitization:** The backend executes parameterized escaping and guards against path traversal or malicious SQL injection attempts within the payload.
+4.  **Dry-Run Schema Validation:** The API performs a transactional `EXPLAIN` or schema-only test-run of the SQL payload to ensure topological validity and syntax correctness without mutating physical data.
+5.  **Commit Transaction:** Upon passing all checks, the JSON payload is committed to the SQLite registry via `PUT /api/v1/catalog/dag/{source_id}`.
+6.  **Execute Transaction:** Following a successful commit, the system fires `POST /api/v1/pipeline/run/{source_id}` to execute the pipeline.
+7.  **Error Telemetry:** Any failure in steps 1-6 halts the sequence. The API returns a formatted error payload which is immediately rendered in the frontend's **Deployment Logs Console** to alert the user.
+
+```mermaid
+graph TD
+    ClickDeploy["Click 'Deploy & Execute Pipeline'"]
+    StateGate{"Frontend State Gate<br>(Requires Gold Node)"}
+    
+    ClickDeploy --> StateGate
+    StateGate -- Invalid --> HaltUI["Button Disabled"]
+    StateGate -- Valid --> SendPayload["Submit JSON Payload"]
+    
+    subgraph Backend Validation Pipeline
+        SecurityScan{"Lexical Security Scan<br>(Check HitL Rules)"}
+        AntiInjection{"Anti-Injection / Sanitization"}
+        DryRun{"Dry-Run Validation<br>(EXPLAIN / Schema Test)"}
+        
+        SendPayload --> SecurityScan
+        SecurityScan -- Pass --> AntiInjection
+        AntiInjection -- Pass --> DryRun
+        
+        SecurityScan -- Fail --> ReturnError
+        AntiInjection -- Fail --> ReturnError
+        DryRun -- Fail --> ReturnError
+    end
+    
+    CommitDAG["PUT /api/v1/catalog/dag/"]
+    RunPipeline["POST /api/v1/pipeline/run/"]
+    LogConsole["Render in Deployment Logs Console"]
+    ReturnError["Throw Exception payload"]
+    
+    DryRun -- Pass --> CommitDAG
+    CommitDAG -- 200 OK --> RunPipeline
+    CommitDAG -- Fail --> ReturnError
+    RunPipeline -- Fail --> ReturnError
+    
+    ReturnError --> LogConsole
+    
+    classDef default fill:#1e1e1e,stroke:#333,stroke-width:2px,color:#fff;
+    classDef primary fill:#0d6efd,stroke:#fff,color:#fff;
+    classDef success fill:#198754,stroke:#fff,color:#fff;
+    classDef error fill:#dc3545,stroke:#fff,color:#fff;
+    
+    class ClickDeploy primary;
+    class CommitDAG,RunPipeline success;
+    class HaltUI,ReturnError,LogConsole error;
+```
 
 ### 6. Enhanced Dashboard Ledger
 *   **New Ledger Columns:** The main "Active Pipelines Ledger" must be updated to display `Last Run` (formatted timestamp) and `Next Run` (formatted timestamp).
