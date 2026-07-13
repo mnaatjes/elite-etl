@@ -33,8 +33,15 @@ The main dashboard page will be strictly composed of three distinct vertical sec
 *   **Available Actions (Buttons per Row):**
     *   **"Approve" / "Reject"**: Contextually visible only if the Pipeline state is `pending_hitl`.
     *   **"Manage Pipeline"**: A primary routing button that takes the user to the dedicated `/pipelines/{id}` detail view (where Orchestration workflows and Lineage graphs will reside).
+    *   **"Job History"**: A toggle button that expands an inline accordion directly beneath the row, displaying the `<JobTable />` scoped specifically to that Pipeline's `source_id`. 
 
 ---
+
+## Styling & Theming Upgrade
+
+*Note: During this phase of development, the UI requires an aesthetic overhaul from basic wireframes to a premium, modern design.*
+
+**Framework Integration:** We will integrate **Bootstrap CSS** (or a similar component framework) to rapidly adapt these UI elements. This will easily handle the complex state logic for the Job History accordions, modals, and responsive tables while significantly improving the application's appearance.
 
 ## Portable Component: Job History Table
 
