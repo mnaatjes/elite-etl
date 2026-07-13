@@ -107,3 +107,40 @@ graph TD
 5.  Administrator writes SQL to transform the `raw_...` table into a staging table.
 6.  A `silver_normalize` **Job ID** executes the SQL, creating a `stg_...` **Node ID** and mapping a dependency edge back to the Bronze Node ID.
 7.  The process repeats for Gold, spawning a `gold_aggregate` **Job ID** and a `dim_...` **Node ID**.
+
+## Implementation: Tracking Pipeline Location
+To track a Source's physical depth within the architecture (its maximum realized progression), a `location` property is proposed for the `RegistryDataSource` model. While `state` tracks authorization, `location` maps the event-driven progression of data.
+
+**Proposed Enum Values (`MedallionDepth`):**
+1.  **`REGISTERED`:** The URL is in the database, but no data has been downloaded yet. (Default state).
+2.  **`BRONZE_SYNCED`:** The DLT engine has successfully extracted the payload and generated `raw_` tables.
+3.  **`SILVER_NORMALIZED`:** The HitL admin has executed at least one successful transformation resulting in a `stg_` table.
+4.  **`GOLD_AGGREGATED`:** The data has successfully reached the final business tier as a `dim_` or `fct_` table.
+
+This property would be event-driven, automatically patching the Source record when a `JobRecord` successfully completes its respective Medallion phase.
+
+## Conceptual Distinction: Source vs. Pipeline
+
+Historically, the `RegistryDataSource` model conflated the concepts of an origin connection and the data's orchestrated journey. To ensure scalable UI and backend design, these identities are conceptually distinct.
+
+> **Important Note:** We will promote **Pipeline** to the primary unified entity of the dashboard. It will serve as the root navigation object that encapsulates configuration, historical jobs, and DAG lineage.
+
+### The Source (The Origin Connection)
+The Source represents strictly the "where" and "what". It defines the immutable physical connection to the outside world.
+*   **Identification Properties:**
+    *   `source_id` (UUID)
+    *   `protocol` (e.g., HTTP, Webhook, S3)
+    *   `download_uri` (e.g., `https://downloads.spansh.co.uk/...`)
+    *   `auth_credentials` (e.g., API keys)
+    *   `etag` / `last_modified` (Upstream state tracking)
+
+### The Pipeline (The Orchestration Unit)
+The Pipeline represents the "how" and "when". It is the primary entity the user manages, and it mathematically *owns* a Source connection.
+*   **Identification Properties:**
+    *   `pipeline_id` (UUID - the primary key for the dashboard)
+    *   `name` (e.g., `spansh_populated` - dictates database schema naming)
+    *   `fk_source_id` (Reference to the Origin Connection)
+    *   `schedule_interval_hours` (Execution frequency)
+    *   `hitl_state` (`pending`, `approved`, `rejected`)
+    *   `medallion_depth` (`REGISTERED`, `BRONZE`, `SILVER`, `GOLD`)
+*   **Ownership:** A Pipeline owns all execution history (`JobRecords`) and the generated Directed Acyclic Graph (`LineageGraph`).
