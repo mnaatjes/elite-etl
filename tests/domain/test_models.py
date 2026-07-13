@@ -10,6 +10,6 @@ def test_datasource_default_location():
     assert source.state == "pending_hitl"
 
 def test_jobrecord_default_metrics():
-    job = JobRecord(source_id=uuid4(), phase=MedallionPhase.BRONZE_SYNC)
+    job = JobRecord(pipeline_id=uuid4(), phase=MedallionPhase.BRONZE_SYNC)
     assert job.metrics == {}
     assert job.status == "running"

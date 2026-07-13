@@ -62,7 +62,7 @@ class SQLiteRegistryRepository(IRegistryRepository):
         return DataSource.model_validate(db_source)
 
     def create_job_record(self, source_id: UUID, phase: MedallionPhase) -> JobRecord:
-        db_job = RegistryJobRecord(source_id=source_id, phase=phase.value, status=JobStatus.RUNNING.value)
+        db_job = RegistryJobRecord(pipeline_id=source_id, phase=phase.value, status=JobStatus.RUNNING.value)
         self.session.add(db_job)
         self.session.commit()
         self.session.refresh(db_job)
@@ -95,7 +95,7 @@ class SQLiteRegistryRepository(IRegistryRepository):
     def list_jobs(self, source_id: Optional[UUID] = None, limit: int = 50) -> List[JobRecord]:
         query = self.session.query(RegistryJobRecord)
         if source_id:
-            query = query.filter(RegistryJobRecord.source_id == source_id)
+            query = query.filter(RegistryJobRecord.pipeline_id == source_id)
         query = query.order_by(RegistryJobRecord.started_at.desc()).limit(limit)
         db_jobs = query.all()
         return [JobRecord.model_validate(job) for job in db_jobs]

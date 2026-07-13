@@ -35,10 +35,10 @@ def run_pipeline():
     print("\n--- 2. Running API Pipeline on galaxy_populated.json.gz (10MB limit) ---")
     with TestClient(app) as client:
         # Register
-        print("Registering Source: spansh_populated...")
+        print("Registering Source: spansh_systems...")
         response = client.post("/api/v1/sources/", json={
-            "name": "spansh_populated",
-            "download_uri": "https://downloads.spansh.co.uk/galaxy_populated.json.gz",
+            "name": "spansh_systems",
+            "download_uri": "https://downloads.spansh.co.uk/systems_1day.json.gz",
             "schedule_interval_hours": 24
         })
         if response.status_code == 201:
@@ -79,8 +79,8 @@ def run_pipeline():
             "dry_run": True,
             "transformations": [
                 {
-                    "target_table": "stg_spansh_populated",
-                    "sql": "SELECT non_existent_column FROM bronze.raw_spansh_populated;"
+                    "target_table": "stg_spansh_systems",
+                    "sql": "SELECT non_existent_column FROM bronze.raw_spansh_systems;"
                 }
             ]
         }
@@ -93,8 +93,8 @@ def run_pipeline():
             "dry_run": False,
             "transformations": [
                 {
-                    "target_table": "stg_spansh_populated",
-                    "sql": "CREATE TABLE IF NOT EXISTS silver.stg_spansh_populated AS SELECT * FROM bronze.raw_spansh_populated;"
+                    "target_table": "stg_spansh_systems",
+                    "sql": "CREATE TABLE IF NOT EXISTS silver.stg_spansh_systems AS SELECT * FROM bronze.raw_spansh_systems;"
                 }
             ]
         }
@@ -112,8 +112,8 @@ def run_pipeline():
             "dry_run": False,
             "transformations": [
                 {
-                    "target_table": "dim_spansh_populated",
-                    "sql": "CREATE TABLE IF NOT EXISTS gold.dim_spansh_populated AS SELECT * FROM silver.stg_spansh_populated;"
+                    "target_table": "dim_spansh_systems",
+                    "sql": "CREATE TABLE IF NOT EXISTS gold.dim_spansh_systems AS SELECT * FROM silver.stg_spansh_systems;"
                 }
             ]
         }

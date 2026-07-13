@@ -23,7 +23,7 @@ class MedallionDepth(str, Enum):
 
 class JobRecord(BaseModel):
     id: UUID = Field(default_factory=uuid4)
-    source_id: UUID
+    pipeline_id: UUID
     phase: MedallionPhase
     status: JobStatus = Field(default=JobStatus.RUNNING)
     metrics: dict = Field(default_factory=dict)

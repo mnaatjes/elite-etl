@@ -18,8 +18,23 @@ class MockRepo:
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow()
         )
+        
+    def update_source_location(self, source_id, location):
+        pass
+        
+    def create_job_record(self, source_id, phase):
+        from src.domain.models.jobs import JobRecord
+        from uuid import uuid4
+        return JobRecord(pipeline_id=uuid4(), phase=phase)
+        
+    def update_job_status(self, job_id, status, error_log=None, metrics=None):
+        pass
 
-app.dependency_overrides[get_registry_repository] = lambda: MockRepo()
+@pytest.fixture(autouse=True)
+def override_dependencies():
+    app.dependency_overrides[get_registry_repository] = lambda: MockRepo()
+    yield
+    app.dependency_overrides.pop(get_registry_repository, None)
 
 client = TestClient(app)
 

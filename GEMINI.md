@@ -43,15 +43,10 @@
 ### 5. Execution & Writing Mandate
 * **Approval Override:** When the user explicitly states "approved", "generate the code", or gives clear consent to a proposed design or model, agents are authorized to immediately bypass manual implementation recommendations and write the code directly to the filesystem using the appropriate tools.
 
-## 6. Next Session Context / Handoff Notes (July 12, 2026)
-* **ETL Pipeline Status:** The core Medallion ETL is 100% functional. We have successfully replaced the flat layer states with the **True DAG Architecture**. The backend now enforces strict validation via an AST SQL Parser, explicitly mapping nodes and edges into a formal `LineageGraph` schema.
-* **Network & API Status:** The API `CORSMiddleware` accepts local network IPs and the `uvicorn` server binds to `0.0.0.0`. 
-* **Data Lineage Architecture:** Lineage is now serialized into SQLite (`RegistryLineageNode` and `RegistryLineageEdge`), making dependencies queryable. 
-* **Frontend Dashboard Status:** The Vue 3 application (`~/src/elite_dashboard/`) is successfully scaffolded and decoupled from pseudo-edges. It seamlessly connects to the backend and renders the D3 graph based on the strict AST JSON payloads.
-* **Next Immediate Task (Packaging TODOs):** Primary development focus MUST now shift to finalizing `elite_quick` for release as a source-agnostic package:
-  1. **Phase 3:** Scaffold `pyproject.toml` to define package metadata and dependencies.
-  2. **Phase 4:** Apply Semantic Versioning (`git tag -a v1.0.0`).
-  3. **Phase 5:** Write the Integration Guide for external applications.
-* **Git Strategy:** Agents must adhere to the Git strategy defined in `docs/explanation/release-and-integration-roadmap.md` (merge to main, prune legacy branches, branch off for decoupling).
-* **Ecosystem Evolution:** We have formally separated the platform (`elite_etl` in `elite_quick`) from domain research (`elite_data_lab`) and the final product (`elite_mvp`). Do NOT write Elite Dangerous specific research code inside the generic ETL pipeline.
-* **AGY Conversation State:** The current active conversation UUID is `a3e62190-9082-4d92-ae36-ede51fcef8ee`. Use this UUID to restore context if the terminal session is interrupted.
+## 6. Next Session Context / Handoff Notes (July 13, 2026)
+*   **API & Pipeline State Migration:** The backend requirements outlined in `docs/explanation/pipeline-state-and-id-hierarchy.md` have been 100% successfully implemented and validated via Pytest. The global ledger correctly limits/sorts jobs (`limit` inject query, `DESC` sort), updates `metrics` dictionary payloads, and tracks `MedallionDepth` locations (e.g. `REGISTERED`, `BRONZE_SYNCED`, etc.).
+*   **Frontend Dashboard Status:** The Vue 3 application (`~/src/elite_dashboard/`) has successfully implemented the primary dashboard view (`docs/explanation/dashboard-home-view-plan.md`). This includes full Bootstrap integration, the 4-section layout (Analytics, Registration, Pipeline Ledger, Global Job History), and the Medallion Color Standards.
+*   **Next Immediate Task:** Continue refining the frontend orchestration workflows, specifically the individual Pipeline Management views (`/pipelines/:id`) and tying the HitL transformations to the UI.
+*   **Git Strategy:** Agents must adhere to the Git strategy defined in `docs/explanation/release-and-integration-roadmap.md` (merge to main, prune legacy branches, branch off for decoupling).
+*   **Ecosystem Evolution:** We have formally separated the platform (`elite_etl` in `elite_quick`) from domain research (`elite_data_lab`) and the final product (`elite_mvp`). Do NOT write Elite Dangerous specific research code inside the generic ETL pipeline.
+*   **AGY Conversation State:** The current active conversation UUID is `fb88335d-1f0b-4e64-bc05-ec99611b1777`. Use this UUID to restore context if the terminal session is interrupted.

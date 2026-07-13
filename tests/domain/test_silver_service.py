@@ -14,7 +14,7 @@ class MockRegistry:
         )
         self.job = JobRecord(
             id=uuid4(),
-            source_id=self.source.id,
+            pipeline_id=self.source.id,
             phase=MedallionPhase.SILVER_NORMALIZE,
             status=JobStatus.RUNNING
         )
@@ -28,15 +28,24 @@ class MockRegistry:
             return self.source
         return None
         
-    def update_job_status(self, job_id, status, error_log=None):
+    def update_job_status(self, job_id, status, error_log=None, metrics=None):
         self.updated_status = status
+        
+    def update_source_location(self, source_id, location):
+        pass
+
+class MockCatalog:
+    def register_tables(self, source_id, layer, load_info):
+        pass
+    def get_template_paths(self, source_id, layer):
+        return ["test_source.sql"]
 
 class MockTransformer:
     def __init__(self, should_fail=False):
         self.called = False
         self.should_fail = should_fail
         
-    def normalize_table(self, source_name):
+    def execute_template(self, template_path, layer="silver"):
         self.called = True
         if self.should_fail:
             raise Exception("Transformation error")
@@ -44,7 +53,7 @@ class MockTransformer:
 def test_silver_normalize_success():
     registry = MockRegistry()
     transformer = MockTransformer()
-    service = SilverService(registry, transformer)
+    service = SilverService(registry, transformer, MockCatalog())
     
     job = service.normalize_source(registry.source.id)
     
@@ -55,7 +64,7 @@ def test_silver_normalize_success():
 def test_silver_normalize_not_found():
     registry = MockRegistry()
     transformer = MockTransformer()
-    service = SilverService(registry, transformer)
+    service = SilverService(registry, transformer, MockCatalog())
     
     job = service.normalize_source(uuid4())
     
@@ -65,7 +74,7 @@ def test_silver_normalize_not_found():
 def test_silver_normalize_failure():
     registry = MockRegistry()
     transformer = MockTransformer(should_fail=True)
-    service = SilverService(registry, transformer)
+    service = SilverService(registry, transformer, MockCatalog())
     
     job = service.normalize_source(registry.source.id)
     

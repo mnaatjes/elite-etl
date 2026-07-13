@@ -57,7 +57,7 @@ class RegistryJobRecord(Base):
     __tablename__ = "job_records"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("data_sources.id"))
+    pipeline_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("data_sources.id"))
     phase: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String)
     metrics: Mapped[dict] = mapped_column(JSON, default=dict)

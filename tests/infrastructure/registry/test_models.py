@@ -39,7 +39,7 @@ def test_create_job_record(session):
     session.commit()
     
     job = RegistryJobRecord(
-        source_id=source.id,
+        pipeline_id=source.id,
         phase="bronze_sync",
         status="running"
     )

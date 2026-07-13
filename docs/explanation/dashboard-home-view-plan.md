@@ -81,3 +81,31 @@ The "View Logs" action button inside this ledger avoids breaking the user's work
     *   **Text Formatting:** The payload is injected into a `<pre>` HTML tag.
     *   **Scrollability:** The interior container must be locked with CSS constraints (`max-height: 60vh; overflow-y: auto; white-space: pre-wrap;`) to ensure massive stack traces do not overflow the user's screen.
     *   **Exit Route:** A clear "Close" button and an "ESC" keypress binding easily destroy the modal, instantly returning the user to their scroll position in the chronological feed.
+
+## Implementation Plan
+
+### Step 1: Install & Configure Bootstrap
+*   **Action:** Run `npm install bootstrap` in `~/src/elite_dashboard`.
+*   **Action:** Update `src/main.js` to import Bootstrap's CSS (`bootstrap/dist/css/bootstrap.min.css`) and JS (`bootstrap/dist/js/bootstrap.bundle.min.js`).
+
+### Step 2: Create UI Components
+*   **Action:** Create `src/components/ui/AnalyticsCards.vue` to fetch from `GET /api/v1/analytics/overview` and render the top-level metrics cards.
+*   **Action:** Create `src/components/ui/SourceRegistrationForm.vue` to provide the registration form and handle `POST /api/v1/sources/`.
+*   **Action:** Create `src/components/ui/LogModal.vue` to render the Bootstrap modal with a scrollable `<pre>` block for `logText`.
+
+### Step 3: Update Existing Components
+*   **Action:** Refactor `src/components/ui/JobTable.vue` to use Bootstrap table classes (`.table`, `.table-sm`) and integrate the new `<LogModal>` component for error tracing.
+
+### Step 4: Assemble the Dashboard View
+*   **Action:** Rewrite `src/views/Dashboard.vue` to establish the four vertical sections.
+*   **Action:** Import and place `<AnalyticsCards>` and `<SourceRegistrationForm>`.
+*   **Action:** Implement the **Active Pipelines Ledger**: fetch `/api/v1/sources/`, render Bootstrap `.card` / `.d-flex` layouts for each pipeline, and build the action buttons (Approve/Reject, Job History accordion toggling `<JobTable>`, and routing).
+*   **Action:** Implement the **Global Job History Ledger**: fetch `/api/v1/jobs/` on mount, render a `.table` with row color-coding (`.table-danger`, `.table-warning`), and connect it to `<LogModal>` for the "View Logs" button.
+
+### Medallion Color Standard
+To visually distinguish data pipeline depths and states, we will implement a custom color language aligned with the Medallion Architecture. These will be added as utility classes to `src/assets/main.css` and applied to badges, table rows, or buttons indicating layer progress.
+
+*   **Bronze (`.bg-medallion-bronze`)**: A pastel bronze/copper background (`#e8c3b1`) with dark text (`#5a3c28`).
+*   **Silver (`.bg-medallion-silver`)**: A pastel silver/slate background (`#e2e8f0`) with dark text (`#334155`).
+*   **Gold (`.bg-medallion-gold`)**: A pastel light gold background (`#fef08a`) with dark text (`#854d0e`).
+*   **Registered / Default**: Standard Bootstrap `.bg-light.text-dark`.

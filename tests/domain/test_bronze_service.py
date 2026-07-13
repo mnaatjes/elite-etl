@@ -11,7 +11,7 @@ import hashlib
 class MockRegistry(IRegistryRepository):
     def __init__(self):
         self.source = DataSource(name="test_api", download_uri="http://example.com")
-        self.job = JobRecord(source_id=self.source.id, phase=MedallionPhase.BRONZE_SYNC, status=JobStatus.RUNNING)
+        self.job = JobRecord(pipeline_id=self.source.id, phase=MedallionPhase.BRONZE_SYNC, status=JobStatus.RUNNING)
         self.updated_source = None
     
     def create_source(self, s): pass
