@@ -144,3 +144,92 @@ The Pipeline represents the "how" and "when". It is the primary entity the user 
     *   `hitl_state` (`pending`, `approved`, `rejected`)
     *   `medallion_depth` (`REGISTERED`, `BRONZE`, `SILVER`, `GOLD`)
 *   **Ownership:** A Pipeline owns all execution history (`JobRecords`) and the generated Directed Acyclic Graph (`LineageGraph`).
+
+## Execution Observability: Jobs and Job Records
+
+In a mature data engineering platform, the `JobRecord` is a critical observability entity. It acts as the permanent ledger of execution attempts, ensuring you can audit when data was updated, why a pipeline failed, and how long transformations took to execute.
+
+### When to Trigger a Job Record
+
+Job Records are strictly generated to wrap **side-effect operations** (network ingestion, disk writes, or physical database execution). They should *never* track transient validations like "Dry Runs".
+
+1. **Bronze Ingestion:** Triggered exactly when the backend initializes the `dlt` loader to extract the external JSON payload and push it into the Postgres `bronze` schema.
+2. **Silver Normalization:** Triggered exactly when the backend establishes a Postgres connection to physically execute the parsed `CREATE TABLE AS SELECT` templates against the `silver` schema.
+3. **Gold Aggregation:** Triggered exactly when the backend establishes a Postgres connection to physically execute the parsed aggregation SQL against the `gold` schema.
+
+### Core Side-Effect Operations to Track
+
+To ensure high observability, the `JobRecord` tracks distinct metrics based on the Medallion phase executing:
+
+1.  **Network Ingestion & Raw Load (Bronze Phase)**
+    *   **Side-Effect:** External HTTP GET and database load.
+    *   **Properties to Track:** `bytes_downloaded`, `etag_hash` (to prove upstream state changes), and `tables_generated`.
+2.  **Normalization Transformation (Silver Phase)**
+    *   **Side-Effect:** Relational mapping in Postgres.
+    *   **Properties to Track:** `rows_affected` (ensuring volume isn't accidentally dropped), `execution_time_ms`, and `templates_executed`.
+3.  **Business Aggregation (Gold Phase)**
+    *   **Side-Effect:** Complex JOIN/GROUP BY operations in Postgres.
+    *   **Properties to Track:** `rows_affected`, `execution_time_ms`, and `templates_executed`.
+
+### Job Execution Flowchart
+
+```mermaid
+graph TD
+    API[API Trigger: POST /execute]
+    Validation{AST Validation & Dry Run}
+    
+    API --> Validation
+    Validation -- "Fails" --> Rejection[400 Bad Request]
+    Validation -- "Passes" --> JobStart[Generate JobRecord <br/> status: running]
+    
+    JobStart --> Execute[Execute Physical Side-Effect]
+    Execute -- "Database Error" --> JobFail[Update JobRecord <br/> status: failed]
+    Execute -- "Commit Success" --> JobSuccess[Update JobRecord <br/> status: success <br/> + rows_affected]
+    
+    classDef default fill:#1e1e1e,stroke:#333,stroke-width:2px,color:#fff;
+    classDef success fill:#28a745,stroke:#fff,color:#fff;
+    classDef error fill:#dc3545,stroke:#fff,color:#fff;
+    
+    class JobSuccess success;
+    class JobFail error;
+    class Rejection error;
+```
+
+### The Remodeled JobRecord Dataclass
+
+To support this granular tracking, the core domain model should be extended to accept a flexible `metrics` JSON object that adapts to the specific Medallion phase.
+
+```python
+from enum import Enum
+from typing import Optional, Dict, Any
+from datetime import datetime
+from uuid import UUID, uuid4
+from pydantic import BaseModel, Field
+
+class JobStatus(str, Enum):
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+class MedallionPhase(str, Enum):
+    BRONZE_SYNC = "bronze_sync"
+    SILVER_NORMALIZE = "silver_normalize"
+    GOLD_AGGREGATE = "gold_aggregate"
+
+class JobRecord(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    pipeline_id: UUID
+    phase: MedallionPhase
+    status: JobStatus = Field(default=JobStatus.RUNNING)
+    
+    # Observability Payload
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    error_log: Optional[str] = None
+    
+    started_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+```
