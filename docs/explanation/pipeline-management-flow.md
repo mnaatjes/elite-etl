@@ -55,9 +55,9 @@ graph TD
     
     %% Path 1 Flow
     subgraph Registration Flow
-        EnterDetails[Enter Name, URI, Interval]
-        ClickRegister[Click 'Register Source']
-        API_POST_Source[POST /api/v1/sources/]
+        EnterDetails["Enter Name, URI, Interval"]
+        ClickRegister["Click 'Register Source'"]
+        API_POST_Source["POST /api/v1/sources/"]
         
         Path1 --> EnterDetails
         EnterDetails --> ClickRegister
@@ -76,10 +76,10 @@ graph TD
         Path2 --> OptionB
         
         %% Option A: Job History
-        API_GET_Jobs[GET /api/v1/jobs/?source_id=...]
-        Accordion[Render Scoped JobTable]
-        ViewLogs[Click 'View Logs' on Failed Job]
-        API_GET_Logs[GET /api/v1/jobs/{job_id}/logs]
+        API_GET_Jobs["GET /api/v1/jobs/?source_id=..."]
+        Accordion["Render Scoped JobTable"]
+        ViewLogs["Click 'View Logs' on Failed Job"]
+        API_GET_Logs["GET /api/v1/jobs/{job_id}/logs"]
         
         OptionA --> Accordion
         Accordion --> API_GET_Jobs
