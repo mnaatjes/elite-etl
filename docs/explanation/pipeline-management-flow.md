@@ -187,3 +187,56 @@ Dagster, conversely, champions **Software-Defined Assets (SDAs)**, shifting the 
 *   **Answer:** 
     *   **Stale:** A node is "Stale" if its upstream parents have been updated more recently than it has. For example, if a Bronze sync pulled new data 5 minutes ago, but the Silver table hasn't been re-run to incorporate it, the Silver table is marked "Stale". 
     *   **Late:** Refers to SLA (Service Level Agreement) violations. If a pipeline is scheduled to run every hour, and 90 minutes have passed, the node is flagged as "Late". We can integrate "Staleness" checks by comparing the `last_updated` timestamps between parent and child nodes in our SQLite registry.
+
+---
+
+## Pipeline Manager UI Integration Plan
+
+The following outlines the immediate integration targets, architectural rules, and required data models to build the detailed Pipeline Management suite and the enhanced Dashboard Ledger.
+
+### 1. Asset-Oriented "True DAG" Architecture
+*   **Rule:** The UI and Pipeline Management must strictly adhere to an **Asset-Oriented** design.
+*   **Implementation:** Unlike imperative orchestrators (like Airflow) that graph arbitrary tasks, our "True DAG" graph nodes will explicitly represent the physical database tables (e.g., `raw_spansh`, `stg_users`, `dim_stations`).
+
+### 2. Required View Definitions
+The dedicated Pipeline Manager (`/pipelines/:id`) will be segmented into two major, toggleable views:
+*   **Details ("Home") View:** A standard web layout listing active rulesets, pipeline configuration, run histories, and manual phase triggers.
+*   **Graph View:** A massive, full-screen interactive canvas exclusively dedicated to rendering the DAG (the database tables and their relational edges).
+
+### 3. Graph Interactivity & The Offcanvas Panel
+*   **Interaction:** Clicking any physical node/table on the Graph View must trigger a right-hand slide-out panel (e.g., a Bootstrap `.offcanvas-end`).
+*   **Panel Contents:**
+    *   The exact SQL template tied to that specific node.
+    *   The physical database schema (column names and data types).
+    *   **Visual Diffing:** The schema list must utilize visual indicators (e.g., color coding, green check-marks `✓`, or red cross-xs `✗`) to immediately communicate to the user which upstream columns were retained and which were dropped during the SQL transformation.
+
+### 4. Graph Design: Layer Groupings & Color Coding
+*   **Medallion Bounding Boxes:** The graph canvas will organize nodes visually by Medallion layer (Bronze, Silver, Gold). This can be achieved via structural "swim-lanes" or large grouped bounding-boxes that encapsulate the respective tables.
+*   **Dynamic Status Colors:** Nodes must dynamically change color to reflect their state:
+    *   **Green:** Success / Up-to-date.
+    *   **Red:** Failed execution / Error.
+    *   **Yellow/Orange:** Stale (upstream data has changed, but this node hasn't been updated to reflect it).
+
+### 5. Enhanced Dashboard Ledger
+*   **New Ledger Columns:** The main "Active Pipelines Ledger" must be updated to display `Last Run` (formatted timestamp) and `Next Run` (formatted timestamp).
+*   **State Management & Filtering:** The ledger must support quick-filtering toggles for the following explicit operational states: `All`, `Active`, `Paused`, `Failed`, `Running`, and `Archived`.
+
+### 6. Required Backend Data Models
+To support the UI enhancements, the backend API requires two new architectural models:
+*   **The "Run" Model:** A Pydantic dataclass representing a `PipelineRun` (a complete traversal of the pipeline DAG), which groups multiple individual `JobRecords`.
+*   **The "Temporal Status" Model:** A Pydantic dataclass representing the temporal state of a specific node/table. This model calculates and tracks values like `"stale"` (parent nodes are newer than the child) and `"late"` (scheduled SLA violated).
+
+### 7. Graph Visualization Tooling Analysis
+To successfully implement the interactive Graph View, the frontend will leverage specialized graphing libraries. Here is a breakdown of the primary options and how they accomplish our goals:
+
+*   **Vue Flow (`@vue-flow/core`):**
+    *   *What it is:* A highly customizable, native Vue 3 library for building node-based applications (a Vue port of the extremely popular React Flow).
+    *   *How we leverage it:* It is ideal for our needs. We can pass our array of `LineageNode` and `LineageEdge` JSON objects directly into it. It natively supports custom Vue components as nodes, meaning we can easily design our own "Asset Nodes" with custom icons, colors, and `@click` bindings to trigger the Bootstrap Offcanvas panel. It also supports sub-graphs, which perfectly solves the requirement for Medallion "Bounding Boxes" (grouping Silver nodes inside a larger Silver parent node).
+*   **Vis-Network (`vis-network`):**
+    *   *What it is:* A robust, canvas-based network visualization library designed to handle massive amounts of dynamic data.
+    *   *How we leverage it:* It excels at physics-based auto-layout. If our DAG becomes incredibly complex with hundreds of tables, Vis-Network will mathematically organize them to minimize crossing lines. However, styling individual nodes is limited to canvas drawing (rather than HTML/CSS), making custom UI designs inside the nodes much harder than Vue Flow.
+*   **Mermaid.js:**
+    *   *What it is:* A markdown-inspired text-to-diagram tool.
+    *   *How we leverage it:* As discussed, the backend can generate simple Mermaid syntax strings that the frontend renders into SVGs. It is excellent for fast, read-only structural overviews but lacks the deep programmatic interactivity (like dragging nodes or native Vue event bindings for the offcanvas panel) required for a premium orchestration suite.
+
+*Recommendation:* **Vue Flow** is the premier choice for achieving the interactive, component-based, and grouped Asset-Oriented DAG requested for the Graph View.
