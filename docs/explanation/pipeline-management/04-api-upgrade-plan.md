@@ -40,6 +40,14 @@ The following routers in `src/api/routers/` must be created or refactored:
     *   *Route:* `GET /api/v1/catalog/lineage/{source_id}`
     *   *File:* `src/api/routers/catalog.py`
     *   *Purpose:* Refactor the return type from `dict` to the new `LineageGraph` Pydantic model. Add logic to compare `last_updated` timestamps between parent and child nodes to calculate the `TemporalStatus` (`stale`/`late`).
+*   **Create DAG Compilation Endpoint:**
+    *   *Route:* `PUT /api/v1/catalog/dag/{source_id}`
+    *   *File:* `src/api/routers/catalog.py`
+    *   *Purpose:* Accepts the complete DAG configuration authored in the UI (nodes, edges, SQL templates) and persists it to the registry.
+*   **Create Unified Pipeline Run Endpoint:**
+    *   *Route:* `POST /api/v1/pipeline/run/{source_id}`
+    *   *File:* `src/api/routers/jobs.py`
+    *   *Purpose:* Replaces individual phase triggers. Instructs the orchestrator to traverse the committed DAG and execute all required transformations.
 
 ### 3. Missing Infrastructure Repositories
 To support the DAG, the underlying SQLite tracking system must be overhauled.

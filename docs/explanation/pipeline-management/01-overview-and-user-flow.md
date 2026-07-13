@@ -33,7 +33,7 @@ From this ledger row, the user has two management options:
 #### Option B: Manage Pipeline (Deep Orchestration)
 *   **User Action:** The user clicks the primary "Manage Pipeline" button.
 *   **Trigger:** A Vue router navigation event teleports the user to the detailed orchestration view (`/pipelines/:id`).
-*   **Result:** The user enters the dedicated pipeline workspace where they can configure SQL templates, inspect bronze catalogs, view Directed Acyclic Graphs (DAGs) for data lineage, and manually trigger medallion phases.
+*   **Result:** The user enters the dedicated pipeline workspace serving as a declarative DAG builder, where they can author SQL templates, visually define data lineage, review the compiled SQL manifest, and schedule or trigger unified pipeline executions.
 
 ## User Flowchart
 
@@ -94,21 +94,21 @@ graph TD
         PipelineView --> GraphView
         
         %% Details View Actions
-        TriggerPhases["Manual Phase Triggers"]
+        SchedulePipeline["Configure Pipeline Schedule"]
         RunHistory["View Run Histories"]
-        DetailsView --> TriggerPhases
+        DetailsView --> SchedulePipeline
         DetailsView --> RunHistory
         
         %% Graph View Actions
-        RenderDAG["Render Asset-Oriented DAG"]
-        ClickNode["Click Physical Node/Table"]
-        Offcanvas["Trigger Offcanvas Panel"]
-        ViewSchema["View SQL & Schema Diffs"]
+        RenderDAG["Render Declarative DAG Builder"]
+        AddNode["Add Silver/Gold Node"]
+        Offcanvas["Trigger Offcanvas SQL Editor"]
+        ViewConsole["Live SQL Manifest Console"]
         
         GraphView --> RenderDAG
-        RenderDAG --> ClickNode
-        ClickNode --> Offcanvas
-        Offcanvas --> ViewSchema
+        RenderDAG --> AddNode
+        AddNode --> Offcanvas
+        Offcanvas --> ViewConsole
     end
     
     classDef default fill:#1e1e1e,stroke:#333,stroke-width:2px,color:#fff;
@@ -136,8 +136,6 @@ To support this user flow, the dashboard will rely on the following endpoints cu
 ### Detailed Orchestration (Option B - Pipeline View)
 *   `GET /api/v1/sources/{source_id}` - Fetches metadata for the specific pipeline workspace.
 *   `PATCH /api/v1/sources/{source_id}` - Updates configuration properties (e.g., execution intervals).
-*   `POST /api/v1/pipeline/bronze/sync/{source_id}` - Triggers initial payload extraction.
-*   `GET /api/v1/pipeline/bronze/catalog/{source_id}` - Introspects the generated Bronze schema.
-*   `POST /api/v1/pipeline/silver/normalize/{source_id}` - Triggers AST validation and Silver execution.
-*   `POST /api/v1/pipeline/gold/aggregate/{source_id}` - Triggers Gold layer transformations.
 *   `GET /api/v1/catalog/lineage/{source_id}` - Retrieves nodes and edges to render the pipeline DAG.
+*   `PUT /api/v1/catalog/dag/{source_id}` - Saves the authored DAG configuration and SQL templates.
+*   `POST /api/v1/pipeline/run/{source_id}` - Triggers a unified pipeline execution (Bronze -> Silver -> Gold).
