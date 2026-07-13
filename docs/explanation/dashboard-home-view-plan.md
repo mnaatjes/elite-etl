@@ -30,10 +30,23 @@ The main dashboard page will be strictly composed of four distinct vertical sect
     *   **Pipeline ID / Name:** The unique identifier (e.g., `spansh_populated`).
     *   **State (Authorization):** `pending_hitl`, `approved`, `rejected`.
     *   **Location (Medallion Depth):** `REGISTERED`, `BRONZE_SYNCED`, `SILVER_NORMALIZED`, `GOLD_AGGREGATED`.
-*   **Available Actions (Buttons per Row):**
-    *   **"Approve" / "Reject"**: Contextually visible only if the Pipeline state is `pending_hitl`.
-    *   **"Manage Pipeline"**: A primary routing button that takes the user to the dedicated `/pipelines/{id}` detail view (where Orchestration workflows and Lineage graphs will reside).
-    *   **"Job History"**: A toggle button that expands an inline accordion directly beneath the row, displaying the `<JobTable />` scoped specifically to that Pipeline's `source_id`. 
+*   **Layout Architecture:** Each Pipeline is rendered as a full-width horizontal "flex card" (`<div class="d-flex w-100 justify-content-between align-items-center p-3 border rounded mb-2">`). This ensures each pipeline physically commands its own horizontal block.
+
+#### Active Pipeline Buttons (Vue / Bootstrap Specs)
+The right-side of the flex card contains an action group (`<div class="btn-group">`) containing the following exact buttons:
+
+1.  **"Approve" / "Reject" (HitL Gates)**
+    *   **Visibility Logic:** `<button v-if="pipeline.state === 'pending_hitl'">`
+    *   **Bootstrap Classes:** `.btn .btn-success` for Approve; `.btn .btn-danger` for Reject.
+    *   **UX Function:** Triggers the API authorization logic. Keeps the user on the same page.
+2.  **"Job History" (Accordion Toggle)**
+    *   **Visibility Logic:** Always visible.
+    *   **Bootstrap Classes:** `.btn .btn-secondary`
+    *   **UX Function:** Employs an `@click="expandedRows.push(id)"` array logic to smoothly reveal a nested Bootstrap Collapse block (`<div class="collapse show">`) directly beneath the card, rendering the scoped `<JobTable :source-id="id" />`.
+3.  **"Manage Pipeline" (Primary Routing)**
+    *   **Visibility Logic:** Always visible.
+    *   **Bootstrap Classes:** `.btn .btn-primary`
+    *   **UX Function:** Implements a `<router-link :to="'/pipelines/' + pipeline.id">` to teleport the user to the detailed orchestration view.
 
 ---
 
