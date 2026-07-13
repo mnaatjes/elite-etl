@@ -184,7 +184,7 @@ graph TD
     
     JobStart --> Execute[Execute Physical Side-Effect]
     Execute -- "Database Error" --> JobFail[Update JobRecord <br/> status: failed]
-    Execute -- "Commit Success" --> JobSuccess[Update JobRecord <br/> status: success <br/> + rows_affected]
+    Execute -- "Commit Success" --> JobSuccess[Update JobRecord <br/> status: success <br/> + metrics payload <br/> Update Pipeline Location]
     
     classDef default fill:#1e1e1e,stroke:#333,stroke-width:2px,color:#fff;
     classDef success fill:#28a745,stroke:#fff,color:#fff;
@@ -233,3 +233,17 @@ class JobRecord(BaseModel):
     class Config:
         from_attributes = True
 ```
+
+## Backend Implementation Requirements (Analysis of the Gap)
+
+While this document perfectly defines the theoretical model, the following physical changes must be implemented in the Python codebase to actively support the `dashboard-home-view-plan.md` architecture:
+
+### 1. Database Model Migrations (`models.py`)
+*   **The `location` Property:** The `location` (MedallionDepth) Enum column must be added to the `RegistryDataSource` SQLAlchemy model.
+*   **The `metrics` Payload:** A `JSON` column must be added to the `RegistryJobRecord` model to store the dynamic observability data (`bytes_downloaded`, `rows_affected`, etc.).
+
+### 2. Event-Driven Logic (`service.py`)
+*   Currently, when a Bronze/Silver/Gold job finishes, the system only logs a "success" status on the job itself. We must explicitly append logic to reach back to the parent Pipeline and patch its `location` state (e.g., bumping it from `BRONZE_SYNCED` to `SILVER_NORMALIZED`).
+
+### 3. API Enhancements (`routers/jobs.py`)
+*   To support the Proxmox-style chronological ledger, the `GET /api/v1/jobs/` endpoint must ensure it queries the SQLite database ordered by `started_at DESC`. It also strictly requires a `limit` parameter (e.g., last 50 jobs) to prevent crashing the frontend with thousands of historical runs.
