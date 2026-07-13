@@ -11,7 +11,7 @@ This document outlines the structural plan for the root dashboard view (`/`). Th
 
 ## Main Page Composition
 
-The main dashboard page will be strictly composed of three distinct vertical sections:
+The main dashboard page will be strictly composed of four distinct vertical sections:
 
 ### 1. Global Analytics Overview
 *   **Purpose:** High-level observability of the entire data platform.
@@ -43,15 +43,23 @@ The main dashboard page will be strictly composed of three distinct vertical sec
 
 **Framework Integration:** We will integrate **Bootstrap CSS** (or a similar component framework) to rapidly adapt these UI elements. This will easily handle the complex state logic for the Job History accordions, modals, and responsive tables while significantly improving the application's appearance.
 
-## Portable Component: Job History Table
+### 4. Global Job History Ledger (Proxmox-Style)
 
-*Note: The Job History Table is a portable Vue component (`<JobTable />`). While currently on the home page, it will likely be relocated to the `/pipelines/{id}` specific detail view to ensure the logs are contextually bound to the Pipeline they belong to.*
+*   **Purpose:** A persistent, scrollable vertical section pinned to the bottom of the dashboard serving as a global chronological feed of all platform activity (similar to Proxmox VE).
+*   **Data Source (API Endpoint):** `GET /api/v1/jobs/` (Returns an array of JobRecords sorted by `started_at` descending).
+*   **Vue Implementation:** 
+    *   Fetched via an `onMounted()` hook and stored in a reactive `const jobs = ref([])` array.
+    *   Wrapped in a fixed-height CSS container to ensure it doesn't overrun the page (e.g., `style="max-height: 300px; overflow-y: auto;"`).
+*   **Bootstrap Color Coding:**
+    *   We will dynamically apply Bootstrap table row classes based on the `job.status` property.
+    *   `<tr :class="{'table-danger': job.status === 'failed', 'table-warning': job.status === 'skipped'}">`
+    *   This provides immediate visual triage capabilities (Red for failures, Yellow for skipped/warnings).
 
-### "View Logs" Implementation Plan
-The "View Logs" button is currently an inactive UI placeholder. The finalized implementation workflow will be:
+#### "View Logs" Modal Integration
+The "View Logs" action button inside this ledger will be wired up via the following workflow:
 
 1.  **State Management:** The button remains locked (`:disabled="job.status !== 'failed'"`) to prevent wasteful network calls for successful jobs.
 2.  **Event Binding:** Attach an `@click` handler that extracts the specific `job.id` from the active table row.
 3.  **API Execution:** The click triggers an asynchronous network request to `GET /api/v1/jobs/{job_id}/logs`.
 4.  **Backend Retrieval:** The backend queries the SQLite `RegistryJobRecord` table using the ID and returns the raw `error_log` string.
-5.  **UI Rendering:** The frontend captures the text payload and renders it inside a centered popup Modal, allowing the administrator to read the exact stack trace or PostgreSQL syntax failure without leaving the page.
+5.  **UI Rendering:** The frontend captures the text payload and mounts it inside a dynamic **Bootstrap Modal** (`<div class="modal fade">`), allowing the administrator to read the exact stack trace without navigating away from the chronological feed.
