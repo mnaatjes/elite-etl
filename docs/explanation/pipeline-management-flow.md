@@ -152,43 +152,7 @@ To support this user flow, the dashboard will rely on the following endpoints cu
 
 ---
 
-## Appendix: UI/UX Notes & Future Integrations
 
-During the design phase, several advanced UI/UX considerations and inspirations from industry-standard tools (Apache Airflow, Dagster) were noted for future integration.
-
-### 1. Pipeline Telemetry & Filtering (Dashboard Ledgers)
-*   **Run Tracking:** The system needs a higher-level metric tracking "Full Pipeline Runs" (e.g., "Spansh pipeline has run 17 times").
-    *   *Analysis (Runs vs. Jobs):* A **"Run"** (Pipeline Run) represents a single, complete traversal of the pipeline from start to finish. A **"Job"** represents the individual, isolated tasks executed *during* that run (e.g., `bronze_sync`, `silver_normalize`). One Run spans multiple Jobs.
-*   **Ledger Columns:** The "Active Pipelines Ledger" should display `Last Run (timestamp)` and `Next Run (timestamp)`.
-*   **State Management & Filtering:** Pipelines require explicit operational states: `active`, `paused`, `failed`, `running`, `archived`. The dashboard ledger must support quick-filtering by these states.
-
-### 2. DAG Visualization Libraries & Strategies
-We aim to replicate the "Graph View" seen in Airflow and Dagster.
-*   **Vue Integration Libraries:** 
-    *   `Vue Flow` (a highly customizable, interactive node-based UI specifically for Vue 3).
-    *   `Cytoscape.js` or `Vis-Network` (heavy-duty graph visualization libraries).
-*   **Simplified Mermaid Approach:** Yes, a simplified graph can absolutely be rendered dynamically using `mermaid.js` inside Vue. The backend can generate Mermaid markdown strings, which the frontend renders natively into SVG flowcharts. While less interactive than `Vue Flow`, it is exceptionally fast to implement for structural overviews.
-
-### 3. Asset-Oriented Groupings & Color Coding
-*   **Layer Groupings:** Inspired by Dagster's Global Asset Lineage, nodes in our graph should be visually grouped within bounding boxes representing their Medallion layer (Bronze, Silver, Gold).
-*   **Status Color Coding:** Nodes should dynamically change color (Green = Success/Up-to-date, Red = Failed, Yellow = Stale) to indicate sync success or transformation errors.
-
-### 4. Tasks vs. Assets (Why do Airflow nodes look different?)
-*   **Question:** *Why do Airflow/Dagster UIs often name nodes as "tasks" (e.g., `fetch_api`) rather than exact database tables?*
-*   **Answer:** Apache Airflow is an **Imperative Task Orchestrator**. Its DAG nodes represent *executable actions* (Python scripts, Bash commands), not data. A single task might update 5 tables or no tables at all. You are looking at the execution sequence, not the data state. 
-Dagster, conversely, champions **Software-Defined Assets (SDAs)**, shifting the paradigm to be *Data-Aware*. In Dagster SDAs, and in our True DAG Architecture, nodes explicitly represent physical database tables (e.g., `dim_stations`). This "Asset-Oriented" view is vastly superior for data engineers because it accurately reflects the physical state of the warehouse.
-
-### 5. Node Interactivity & Metadata Panel
-*   **Implementation Idea:** Clicking a physical node/table on the graph should trigger a right-hand slide-out panel (e.g., a Bootstrap Offcanvas).
-*   **Contents:** This panel will display the exact SQL template tied to the node, the physical database schema (column names and types), execution state, and exact row-counts.
-
-### 6. "Stale" Data Concepts
-*   **Question:** *In Dagster, what do "stale" or "late" statuses mean?*
-*   **Answer:** 
-    *   **Stale:** A node is "Stale" if its upstream parents have been updated more recently than it has. For example, if a Bronze sync pulled new data 5 minutes ago, but the Silver table hasn't been re-run to incorporate it, the Silver table is marked "Stale". 
-    *   **Late:** Refers to SLA (Service Level Agreement) violations. If a pipeline is scheduled to run every hour, and 90 minutes have passed, the node is flagged as "Late". We can integrate "Staleness" checks by comparing the `last_updated` timestamps between parent and child nodes in our SQLite registry.
-
----
 
 ## Pipeline Manager UI Integration Plan
 
