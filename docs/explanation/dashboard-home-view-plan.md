@@ -56,10 +56,15 @@ The main dashboard page will be strictly composed of four distinct vertical sect
     *   This provides immediate visual triage capabilities (Red for failures, Yellow for skipped/warnings).
 
 #### "View Logs" Modal Integration
-The "View Logs" action button inside this ledger will be wired up via the following workflow:
+The "View Logs" action button inside this ledger avoids breaking the user's workflow by rendering logs dynamically over the active screen. It will be implemented via the following workflow:
 
 1.  **State Management:** The button remains locked (`:disabled="job.status !== 'failed'"`) to prevent wasteful network calls for successful jobs.
 2.  **Event Binding:** Attach an `@click` handler that extracts the specific `job.id` from the active table row.
 3.  **API Execution:** The click triggers an asynchronous network request to `GET /api/v1/jobs/{job_id}/logs`.
 4.  **Backend Retrieval:** The backend queries the SQLite `RegistryJobRecord` table using the ID and returns the raw `error_log` string.
-5.  **UI Rendering:** The frontend captures the text payload and mounts it inside a dynamic **Bootstrap Modal** (`<div class="modal fade">`), allowing the administrator to read the exact stack trace without navigating away from the chronological feed.
+5.  **UI Component (`<LogModal />`):** The frontend captures the text payload and passes it as a prop to a dedicated, reusable Vue component (e.g., `<LogModal :logText="payload" />`).
+6.  **UX & CSS Constraints (Bootstrap):**
+    *   **Structure:** Uses the standard Bootstrap Modal classes (`<div class="modal fade shadow-lg" style="z-index: 1055;">`) to dim the background dashboard and anchor the user's focus on the error.
+    *   **Text Formatting:** The payload is injected into a `<pre>` HTML tag.
+    *   **Scrollability:** The interior container must be locked with CSS constraints (`max-height: 60vh; overflow-y: auto; white-space: pre-wrap;`) to ensure massive stack traces do not overflow the user's screen.
+    *   **Exit Route:** A clear "Close" button and an "ESC" keypress binding easily destroy the modal, instantly returning the user to their scroll position in the chronological feed.
