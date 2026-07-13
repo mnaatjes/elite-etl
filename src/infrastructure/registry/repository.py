@@ -49,6 +49,18 @@ class SQLiteRegistryRepository(IRegistryRepository):
         self.session.refresh(db_source)
         return DataSource.model_validate(db_source)
 
+    def update_source_location(self, source_id: UUID, location: str) -> DataSource:
+        logger.debug(f"Updating source {source_id} location to {location}")
+        db_source = self.session.query(RegistryDataSource).filter(RegistryDataSource.id == source_id).first()
+        if not db_source:
+            logger.error(f"Cannot update location for source {source_id}: Not found")
+            raise ValueError(f"Source with id {source_id} not found")
+            
+        db_source.location = location
+        self.session.commit()
+        self.session.refresh(db_source)
+        return DataSource.model_validate(db_source)
+
     def create_job_record(self, source_id: UUID, phase: MedallionPhase) -> JobRecord:
         db_job = RegistryJobRecord(source_id=source_id, phase=phase.value, status=JobStatus.RUNNING.value)
         self.session.add(db_job)
@@ -56,7 +68,7 @@ class SQLiteRegistryRepository(IRegistryRepository):
         self.session.refresh(db_job)
         return JobRecord.model_validate(db_job)
 
-    def update_job_status(self, job_id: UUID, status: JobStatus, error_log: Optional[str] = None) -> JobRecord:
+    def update_job_status(self, job_id: UUID, status: JobStatus, error_log: Optional[str] = None, metrics: Optional[dict] = None) -> JobRecord:
         db_job = self.session.query(RegistryJobRecord).filter(RegistryJobRecord.id == job_id).first()
         if not db_job:
             raise ValueError(f"Job with id {job_id} not found")
@@ -64,6 +76,8 @@ class SQLiteRegistryRepository(IRegistryRepository):
         db_job.status = status.value
         if error_log:
             db_job.error_log = error_log
+        if metrics is not None:
+            db_job.metrics = metrics
             
         if status in [JobStatus.SUCCESS, JobStatus.FAILED, JobStatus.SKIPPED]:
             db_job.completed_at = datetime.utcnow()

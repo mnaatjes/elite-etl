@@ -1,7 +1,7 @@
 from uuid import UUID
 from src.domain.interfaces.registry import IRegistryRepository
 from src.domain.interfaces.aggregator import IDataAggregator
-from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase
+from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase, MedallionDepth
 from src.infrastructure.logging import get_logger
 
 logger = get_logger("gold.service")
@@ -33,7 +33,12 @@ class GoldService:
             for path in template_paths:
                 self.aggregator.execute_template(path, "gold")
             
-            self.registry.update_job_status(job.id, JobStatus.SUCCESS)
+            metrics = {
+                "templates_executed": len(template_paths)
+            }
+            
+            self.registry.update_job_status(job.id, JobStatus.SUCCESS, metrics=metrics)
+            self.registry.update_source_location(source_id, MedallionDepth.GOLD_AGGREGATED)
             logger.info(f"Gold aggregation successful for {source.name}")
             
         except Exception as e:

@@ -41,6 +41,7 @@ class DataSourceUpdate(BaseModel):
 class DataSource(DataSourceBase):
     id: UUID = Field(default_factory=uuid4)
     state: SourceState = Field(default=SourceState.PENDING_HITL)
+    location: str = Field(default="REGISTERED")
     etag: Optional[str] = None
     last_modified: Optional[str] = None
     sha256_hash: Optional[str] = None

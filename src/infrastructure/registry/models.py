@@ -14,6 +14,7 @@ class RegistryDataSource(Base):
     download_uri: Mapped[str] = mapped_column(String)
     schedule_interval_hours: Mapped[int] = mapped_column(Integer)
     state: Mapped[str] = mapped_column(String, default="pending_hitl")
+    location: Mapped[str] = mapped_column(String, default="REGISTERED")
     
     etag: Mapped[str | None] = mapped_column(String, nullable=True)
     last_modified: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -59,6 +60,7 @@ class RegistryJobRecord(Base):
     source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("data_sources.id"))
     phase: Mapped[str] = mapped_column(String)
     status: Mapped[str] = mapped_column(String)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
     error_log: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -26,7 +26,11 @@ class IRegistryRepository(ABC):
         pass
 
     @abstractmethod
-    def update_job_status(self, job_id: UUID, status: JobStatus, error_log: Optional[str] = None) -> JobRecord:
+    def update_source_location(self, source_id: UUID, location: str) -> DataSource:
+        pass
+
+    @abstractmethod
+    def update_job_status(self, job_id: UUID, status: JobStatus, error_log: Optional[str] = None, metrics: Optional[dict] = None) -> JobRecord:
         pass
         
     @abstractmethod

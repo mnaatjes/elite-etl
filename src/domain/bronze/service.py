@@ -5,7 +5,7 @@ from uuid import UUID
 from src.domain.interfaces.registry import IRegistryRepository
 from src.domain.interfaces.network import INetworkClient
 from src.domain.interfaces.loader import IDataLoader
-from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase
+from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase, MedallionDepth
 from src.domain.models.registry import DataSourceUpdate
 from src.infrastructure.logging import get_logger
 
@@ -75,7 +75,14 @@ class BronzeService:
             update = DataSourceUpdate(etag=remote_etag, sha256_hash=final_hash)
             self.registry.update_source(source_id, update)
             
-            self.registry.update_job_status(job.id, JobStatus.SUCCESS)
+            # Compile metrics
+            metrics = {
+                "tables_generated": len(load_info_dict.get("tables", [])),
+                "etag_hash": final_hash
+            }
+            
+            self.registry.update_job_status(job.id, JobStatus.SUCCESS, metrics=metrics)
+            self.registry.update_source_location(source_id, MedallionDepth.BRONZE_SYNCED)
             logger.info(f"Bronze sync successful for {source_id}")
 
         except Exception as e:

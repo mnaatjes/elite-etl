@@ -1,7 +1,7 @@
 from uuid import UUID
 from src.domain.interfaces.registry import IRegistryRepository
 from src.domain.interfaces.transformer import IDataTransformer
-from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase
+from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase, MedallionDepth
 from src.infrastructure.logging import get_logger
 
 logger = get_logger("silver.service")
@@ -33,7 +33,12 @@ class SilverService:
             for path in template_paths:
                 self.transformer.execute_template(path)
             
-            self.registry.update_job_status(job.id, JobStatus.SUCCESS)
+            metrics = {
+                "templates_executed": len(template_paths)
+            }
+            
+            self.registry.update_job_status(job.id, JobStatus.SUCCESS, metrics=metrics)
+            self.registry.update_source_location(source_id, MedallionDepth.SILVER_NORMALIZED)
             logger.info(f"Silver normalization successful for {source.name}")
             
         except Exception as e:
