@@ -119,23 +119,30 @@ graph TD
     class API_POST_Source,API_GET_Jobs,API_GET_Logs success;
 ```
 
-## Required API Endpoints
+## State-Mutating Event-to-API Mapping
 
-To support this user flow, the dashboard will rely on the following endpoints currently exposed by the backend API:
+To ensure strict architectural boundaries and prevent frontend/backend integration ambiguity, all state-mutating UI events must map explicitly to the following API endpoints. Read-only interactions (like opening a node or viewing the Payload Preview) do not trigger network requests.
 
-### Registration & Global State (Dashboard Layer)
-*   `POST /api/v1/sources/` - Registers a new source (Path 1).
-*   `GET /api/v1/sources/` - Populates the Active Pipeline Ledger (Path 2).
-*   `PUT /api/v1/sources/{source_id}/approve` - Authorizes a pipeline to proceed past the Human-in-the-Loop gate.
-*   `GET /api/v1/analytics/overview` - Populates global metric cards.
+### 1. Source Registration (Dashboard Level)
+*   **UI Event:** User clicks "Register Source" in the Quick Registration form.
+*   **Payload:** `{ "name": "Spansh", "uri": "https://...", "interval_hrs": 24 }`
+*   **API Target:** `POST /api/v1/sources/`
+*   **Result:** Initializes the pipeline and auto-renders the Bronze nodes in the DAG Builder.
 
-### Telemetry & Diagnostics (Option A)
-*   `GET /api/v1/jobs/` (with optional `?source_id={id}`) - Populates the scoped and global job history ledgers.
-*   `GET /api/v1/jobs/{job_id}/logs` - Retrieves raw text stack traces for the `LogModal`.
+### 2. DAG Compilation (Pipeline Level)
+*   **UI Event:** User clicks "Deploy & Execute Pipeline" (Step 1: The Commit).
+*   **Payload:** The fully structured `LineageGraph` JSON (nodes, edges, compiled SQL).
+*   **API Target:** `PUT /api/v1/catalog/dag/{source_id}`
+*   **Result:** Persists the entire authored DAG configuration to the SQLite registry.
 
-### Detailed Orchestration (Option B - Pipeline View)
-*   `GET /api/v1/sources/{source_id}` - Fetches metadata for the specific pipeline workspace.
-*   `PATCH /api/v1/sources/{source_id}` - Updates configuration properties (e.g., execution intervals).
-*   `GET /api/v1/catalog/lineage/{source_id}` - Retrieves nodes and edges to render the pipeline DAG.
-*   `PUT /api/v1/catalog/dag/{source_id}` - Saves the authored DAG configuration and SQL templates.
-*   `POST /api/v1/pipeline/run/{source_id}` - Triggers a unified pipeline execution (Bronze -> Silver -> Gold).
+### 3. Unified Execution (Pipeline Level)
+*   **UI Event:** The backend successfully returns `200 OK` from the DAG Compilation event (Step 2: The Execute).
+*   **Payload:** Empty body (relies on `{source_id}`).
+*   **API Target:** `POST /api/v1/pipeline/run/{source_id}`
+*   **Result:** Instructs the orchestrator to traverse the committed DAG and execute transformations.
+
+### 4. Configuration Updates (Pipeline Level)
+*   **UI Event:** User modifies the `interval` schedule or pipeline metadata in the Details View.
+*   **Payload:** Partial JSON patch of modified fields.
+*   **API Target:** `PATCH /api/v1/sources/{source_id}`
+*   **Result:** Updates the pipeline's operational configuration.

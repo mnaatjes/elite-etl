@@ -28,15 +28,13 @@ The Pipeline Management view is composed of several interactive web components d
 6.  **Deployment Logs Console:** A dedicated modal or fixed UI panel designed to catch and display any validation, security, or execution errors returned during the deployment process.
 
 ### 4. Graph Interactivity & Authoring
-*   **Node Creation:** Initiating "Add Node" requires the user to specify a table name and immediately opens the Offcanvas Authoring panel.
-*   **Offcanvas Panel Contents:**
-    *   The SQL template editor tied to that specific node.
-    *   Visual GUI for dragging/dropping columns from upstream tables (future enhancement).
-    *   **Visual Diffing:** Real-time schema validation showing which upstream columns are retained or dropped.
-*   **State Reactivity (Manifest & JSON Updates):** The Payload Preview and Debug Console modals must reactively update on specific UI events:
-    *   Typing/saving within the Offcanvas SQL editor.
-    *   Connecting or severing an edge between nodes.
-    *   Creating or deleting a node.
+*   **Node Creation (Base Entity Prefixing):** Initiating "Add Node" prompts the user for a "Base Entity Name" (e.g., `users`). The frontend automatically and irreversibly prepends the correct namespace/prefix based on the active swim-lane (`stg_` for Silver, `dim_`/`fct_` for Gold). This assembled string (e.g., `stg_users`) becomes the immutable `node_id`.
+*   **Offcanvas SQL Auto-Population:** Upon node creation, the SQL editor auto-populates an immutable wrapper (e.g., `CREATE TABLE silver.stg_users AS \n SELECT \n ... \n;`). The wrapper syntax should be styled as disabled/read-only text, enforcing the rule that the user *only* authors the internal `SELECT` statement.
+    *   **Edge Detection:** If a user draws edges from multiple parent nodes to a single child node *before* opening the Offcanvas, the frontend intelligently auto-populates the `FROM` and `JOIN` clauses using the parent `node_id`s, leaving the user to define the `ON` condition.
+*   **Transient State vs. Committed State:** The Offcanvas editor manages a strictly local, transient state as the user types. 
+    *   **Committing:** The SQL string is only serialized and committed to the central Vue Flow graph state (e.g., binding to `node.data.sql`) when the user explicitly clicks a "Save/Apply" button within the Offcanvas.
+    *   **Re-editing:** If a user re-opens the Offcanvas (by clicking the node), the local state is re-hydrated from `node.data.sql` for further editing.
+*   **Payload Preview State Reactivity:** The Payload Preview and Debug Console modals DO NOT scrape raw DOM inputs from the Offcanvas. They iterate exclusively over the committed, saved central Vue Flow state. Therefore, these modals will only reflect changes after an Offcanvas "Save/Apply" event, or when an edge is explicitly connected/severed on the canvas.
 
 ### 5. Graph Design: Medallion Swim-Lanes
 *   **Swim-Lanes Architecture:** The graph canvas organizes nodes visually using strict swim-lanes. The user authors the DAG flowing left-to-right: Bronze lane on the far left (read-only origins), Silver lane in the center, and Gold lane on the right.
