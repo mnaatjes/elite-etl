@@ -34,7 +34,12 @@ The Pipeline Management view is composed of several interactive web components d
 *   **Transient State vs. Committed State:** The Offcanvas editor manages a strictly local, transient state as the user types. 
     *   **Committing:** The SQL string is only serialized and committed to the central Vue Flow graph state (e.g., binding to `node.data.sql`) when the user explicitly clicks a "Save/Apply" button within the Offcanvas.
     *   **Re-editing:** If a user re-opens the Offcanvas (by clicking the node), the local state is re-hydrated from `node.data.sql` for further editing.
+*   **Offcanvas Schema Diff UI:** When the API validates the SQL, the Offcanvas must visually render the diffs:
+    *   **Color-Scheme Indicators:** Specific columns listed in the Offcanvas must be highlighted: `orange`/`yellow` for unresolved but harmless diffs (e.g., a new column added upstream), and `red` for fatal diffs that MUST be resolved (e.g., a referenced column dropped upstream).
+    *   **Message Box:** A fixed notification `div` at the bottom of the Offcanvas describing the specific diffs. The background color of this `div` maps to the highest severity diff currently present (e.g., red if any fatal diff exists).
+    *   **State Gate Lock:** If *any* unresolved `red` (fatal) diff exists, the UI State Gate forcefully blocks the ability to commit DAG changes to the API, disabling the "Deploy & Execute Pipeline" button.
 *   **Payload Preview State Reactivity:** The Payload Preview and Debug Console modals DO NOT scrape raw DOM inputs from the Offcanvas. They iterate exclusively over the committed, saved central Vue Flow state. Therefore, these modals will only reflect changes after an Offcanvas "Save/Apply" event, or when an edge is explicitly connected/severed on the canvas.
+*   **Node Deletion (Cascade Rule):** If a user deletes a node in the Silver swim-lane, the frontend must auto-delete any dependent Gold nodes connected to it (cascading deletion). This deletion event must trigger an immediate re-render of the Payload Preview/Debug Console and trigger a re-evaluation of the Frontend State Gate (which may disable the deploy button if the final Gold node was just deleted).
 
 ### 5. Graph Design: Medallion Swim-Lanes
 *   **Swim-Lanes Architecture:** The graph canvas organizes nodes visually using strict swim-lanes. The user authors the DAG flowing left-to-right: Bronze lane on the far left (read-only origins), Silver lane in the center, and Gold lane on the right.
@@ -100,6 +105,10 @@ graph TD
     class HaltUI,ReturnError,LogConsole error;
 ```
 
-### 6. Enhanced Dashboard Ledger
+### 7. Enhanced Dashboard Ledger
 *   **New Ledger Columns:** The main "Active Pipelines Ledger" must be updated to display `Last Run` (formatted timestamp) and `Next Run` (formatted timestamp).
 *   **State Management & Filtering:** The ledger must support quick-filtering toggles for the following explicit operational states: `All`, `Active`, `Paused`, `Failed`, `Running`, and `Archived`.
+*   **Lifecycle UI Controls:** Each pipeline row in the ledger must expose explicit action buttons mapped to the API Configuration State:
+    *   **Activate / Pause:** Toggles the `interval` execution schedule (maps to `PATCH /api/v1/sources/{source_id}`).
+    *   **Force / Run:** Bypasses the schedule to immediately execute the committed DAG (maps to `POST /api/v1/pipeline/run/{source_id}`).
+    *   **Archive / Delete (Teardown):** Triggers a modal for pipeline teardown, offering a soft-archive or hard-delete of the physical tables and configuration (maps to `DELETE /api/v1/sources/{source_id}`).

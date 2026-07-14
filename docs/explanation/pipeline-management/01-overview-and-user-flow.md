@@ -141,8 +141,26 @@ To ensure strict architectural boundaries and prevent frontend/backend integrati
 *   **API Target:** `POST /api/v1/pipeline/run/{source_id}`
 *   **Result:** Instructs the orchestrator to traverse the committed DAG and execute transformations.
 
-### 4. Configuration Updates (Pipeline Level)
-*   **UI Event:** User modifies the `interval` schedule or pipeline metadata in the Details View.
-*   **Payload:** Partial JSON patch of modified fields.
+### 3.5 Execution Observation (Read-Only Polling)
+*   **UI Event:** Immediately upon triggering a run, the Vue frontend initiates a Javascript `setInterval` loop to perform lightweight HTTP Polling.
+*   **Payload:** None (Query Parameter).
+*   **API Target:** `GET /api/v1/pipeline/status/{source_id}`
+*   **Result:** Fetches a minimal JSON payload reflecting real-time DAG traversal progress. The polling loop terminates when the backend returns a terminal state (`SUCCESS` or `FAILED`). This MVP approach avoids the complexity of WebSocket state management.
+
+### 4. Lifecycle & Configuration (Pipeline/Dashboard Level)
+*   **UI Event:** User modifies the `interval` schedule or toggles the pipeline state to **Activate** or **Deactivate/Pause**.
+*   **Payload:** Partial JSON patch (e.g., `{ "state": "PAUSED", "interval_hrs": 12 }`).
 *   **API Target:** `PATCH /api/v1/sources/{source_id}`
-*   **Result:** Updates the pipeline's operational configuration.
+*   **Result:** Updates operational configuration. A paused pipeline will not execute its CRON schedule.
+
+### 5. Pipeline Teardown (Dashboard Level)
+*   **UI Event:** User clicks **Archive/Delete** in the Dashboard Ledger.
+*   **Payload:** Empty body (relies on `{source_id}`).
+*   **API Target:** `DELETE /api/v1/sources/{source_id}`
+*   **Result:** Triggers a cascading deletion or soft-archive of the pipeline, its DAG configuration, and its physical tables from the database.
+
+### 6. Force Run (Dashboard Level)
+*   **UI Event:** User clicks **Force/Run** to bypass the interval schedule and immediately execute the pipeline.
+*   **Payload:** Empty body (relies on `{source_id}`).
+*   **API Target:** `POST /api/v1/pipeline/run/{source_id}`
+*   **Result:** Immediately executes the existing committed DAG state, resetting the 'Next Run' timer.
