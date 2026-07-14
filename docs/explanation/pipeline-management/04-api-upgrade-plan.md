@@ -26,7 +26,10 @@ The current models in `src/domain/models/` are insufficient for the new architec
     *   *Purpose:* A strict Enum (`DAG_DRAFT`, `DAG_COMMITTED`, `DAG_INVALID`) to decouple the authoring configuration state from the physical data execution state.
 *   **Schema Diffing Models (`SchemaDiffRequest`, `SchemaDiffResponse`):**
     *   *File:* `src/domain/models/catalog.py`
-    *   *Purpose:* Pydantic models to strictly type the incoming raw SQL string and the outgoing JSON structural comparison (retained vs. dropped columns).
+    *   *Purpose:* Pydantic models to strictly type the incoming raw SQL string and the outgoing JSON structural comparison. The `SchemaDiffResponse` must explicitly prototype the following to power the UI's color-coding and message boxes:
+        *   `is_fatal: bool` (Maps directly to the State Gate lock).
+        *   `diffs: list[ColumnDiff]` (A nested model).
+        *   `ColumnDiff` must include: `column_name: str`, `diff_type: Enum(ADDITIVE, SUBTRACTIVE, MUTATIVE)`, `severity: Enum(WARNING, FATAL)`, and `message: str` (e.g., "Warning: New column 'age' added upstream.", "FATAL: Column 'email' referenced in SQL but dropped upstream.").
 *   **`DataSource` Model Upgrades:**
     *   *File:* `src/domain/models/registry.py`
     *   *Purpose:* Add `last_run: Optional[datetime]`, `next_run: Optional[datetime]`, and expand `SourceState` to include `active`, `paused`, `running`, and `archived`.
