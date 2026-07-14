@@ -19,7 +19,9 @@ To transition from static endpoints to a logical user flow, map the user's busin
 
 ## 2. Document the Workflow in Markdown
 
-Use Mermaid.js (native to GitHub, VitePress, and most Markdown viewers) to write text-based, version-controlled sequence diagrams, paired with a metadata table.
+Use Mermaid.js (native to GitHub, VitePress, and most Markdown viewers) to write text-based, version-controlled sequence diagrams, paired with a metadata table. 
+
+**Full-Stack Mandate (White Box Diagrams):** Do not simply model HTTP requests as a black box. You must use a "White Box" architectural perspective. Explicitly model internal participants such as the `API Router`, `Domain Services`, and `Database` so that the frontend integration points and the backend side-effects (like DB writes) are completely transparent in a single flow.
 
 ### Example Markdown Strategy
 
