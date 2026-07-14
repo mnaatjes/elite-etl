@@ -45,8 +45,10 @@
 
 ## 6. Next Session Context / Handoff Notes (July 14, 2026)
 *   **Backend API Completed (Declarative DAG Builder):** The API upgrade plan is fully executed. We implemented the Pydantic models, the SQLite node/edge registry logic (`sync_dag`), the Python `set` arithmetic `SchemaDiffEngine`, and the `dry_run_sql` Postgres introspection method.
-*   **Unified Orchestration Replaced Imperative Triggers:** We removed the file-based `open()` template execution logic. The pipeline now natively extracts SQL from SQLite and runs it via the unified `POST /api/v1/pipeline/run/{source_id}` endpoint.
-*   **Tests & Deprecations Resolved:** Full unit and integration tests were generated and updated for the new endpoints and mocked services. `Pydantic V1 Config` and `datetime.utcnow()` deprecation warnings have been purged from the codebase in favor of V2 `ConfigDict` and timezone-aware `datetime.now(timezone.utc)`.
-*   **Next Immediate Task (Frontend Migration):** The backend API is ready. The next agent must pivot to the `elite_dashboard` Vue.js frontend repository to implement the Phase 3 & 4 plan: build the `PipelineGraph.vue` using Vue Flow, integrate the `Payload Preview` / `Debug Console` modals, and implement the "Deploy & Execute Pipeline" UI button with State Gate locking based on FATAL diff classifications.
+*   **Frontend Migration Completed:** The frontend `elite_dashboard` Vue.js repository has been successfully updated with the Phase 3 & 4 plan. `PipelineGraph.vue` using Vue Flow is fully integrated. 
+    *   Node schemas from `catalog.py` properly hydrate the DAG canvas. 
+    *   Styling and interactions (pan/zoom) have been optimized for large tables. 
+    *   The "Deploy & Execute Pipeline" logic has been decoupled from the component and hoisted to the main interface.
+*   **Next Immediate Task (E2E Integration Testing):** We need to run a manual end-to-end integration test from the dashboard UI to confirm data correctly flows from the API to the PostgreSQL backend when a pipeline is deployed and executed.
 *   **Git Strategy:** Agents must adhere to the Git strategy defined in `docs/explanation/release-and-integration-roadmap.md` (merge to main, prune legacy branches, branch off for decoupling).
 *   **AGY Conversation State:** The current active conversation UUID is `b0566c18-f4a2-46d3-bc92-0f6417f30c0f`. Use this UUID to restore context if the terminal session is interrupted.
