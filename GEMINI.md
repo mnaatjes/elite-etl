@@ -30,6 +30,7 @@
     ---
     ```
 * **Updates:** Agents must update `last_updated_at` when modifying a document.
+* **API Documentation:** Anytime an API Endpoint is created, changed, or deleted, `docs/reference/api-reference.md` MUST be updated to reflect the new state.
 
 ### 3. Architectural Enforcement Mandates
 * **Hexagonal Architecture:** Agents MUST enforce Hexagonal Architecture (Ports & Adapters). Ensure core domain logic never imports from or depends on the `api` or `infrastructure` layers directly.

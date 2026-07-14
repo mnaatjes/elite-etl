@@ -8,12 +8,14 @@ from unittest.mock import MagicMock
 from src.api.routers.jobs import router as jobs_router
 from src.api.routers.catalog import router as catalog_router
 from src.api.routers.sources import router as sources_router
+from src.api.routers.pipeline import router as pipeline_router
 
 from src.api.dependencies import get_registry_repository, get_lineage_catalog
 
 # Setup a test app
 app = FastAPI()
-app.include_router(jobs_router, prefix="/api/v1/pipeline")
+app.include_router(jobs_router, prefix="/api/v1/jobs")
+app.include_router(pipeline_router, prefix="/api/v1/pipeline")
 app.include_router(catalog_router, prefix="/api/v1/catalog")
 app.include_router(sources_router, prefix="/api/v1/sources")
 
