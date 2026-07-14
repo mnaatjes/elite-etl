@@ -3,10 +3,9 @@ import os
 from unittest.mock import patch, MagicMock, mock_open
 from src.infrastructure.aggregators.sql_aggregator import PostgresSqlAggregator
 
-@patch("builtins.open", new_callable=mock_open, read_data="CREATE TABLE gold.dim_test_source AS\nSELECT * FROM silver.stg_test_source")
 @patch("src.infrastructure.aggregators.sql_aggregator.psycopg2.connect")
 @patch.dict(os.environ, {"DESTINATION__POSTGRES__CREDENTIALS": "postgresql://test:test@localhost/test"})
-def test_postgres_sql_aggregator_success(mock_connect, mock_file):
+def test_postgres_sql_aggregator_success(mock_connect):
     mock_conn = MagicMock()
     mock_cursor = MagicMock()
     
@@ -15,7 +14,7 @@ def test_postgres_sql_aggregator_success(mock_connect, mock_file):
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     
     aggregator = PostgresSqlAggregator()
-    aggregator.execute_template("test_source.sql")
+    aggregator.execute_sql("CREATE TABLE gold.dim_test_source AS\nSELECT * FROM silver.stg_test_source")
     
     assert mock_connect.called
     assert mock_conn.cursor.called
@@ -33,4 +32,4 @@ def test_postgres_sql_aggregator_success(mock_connect, mock_file):
 def test_postgres_sql_aggregator_missing_env():
     aggregator = PostgresSqlAggregator()
     with pytest.raises(ValueError, match="DESTINATION__POSTGRES__CREDENTIALS not set"):
-        aggregator.execute_template("test_source.sql")
+        aggregator.execute_sql("SELECT 1")

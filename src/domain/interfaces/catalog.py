@@ -24,11 +24,16 @@ class ILineageCatalog(ABC):
         pass
         
     @abstractmethod
-    def get_template_paths(self, source_id: UUID, layer: str) -> List[str]:
-        """Retrieves all template paths registered for a specific source and layer."""
+    def get_sql_templates(self, source_id: UUID, layer: str) -> List[str]:
+        """Retrieves all natively stored SQL templates for a specific source and layer."""
         pass
         
     @abstractmethod
     def get_lineage_graph(self, source_id: UUID) -> dict:
         """Returns the full dependency graph mapping of tables and templates for a source."""
+        pass
+        
+    @abstractmethod
+    def sync_dag(self, source_id: UUID, graph_payload: dict) -> None:
+        """Executes the atomic DAG compilation sync transaction."""
         pass

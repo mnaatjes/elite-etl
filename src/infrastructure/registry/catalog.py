@@ -27,6 +27,7 @@ class SqliteLineageCatalog(ILineageCatalog):
                 columns = t_data.get("columns")
                 
             db_table = RegistryLineageNode(
+                pipeline_id=source_id,
                 medallion_layer=layer,
                 table_name=t_name,
                 columns_schema=columns,
@@ -71,26 +72,28 @@ class SqliteLineageCatalog(ILineageCatalog):
         ).first()
         
         if table:
-            table.transformation_template_path = file_path
+            # Legacy stub - replaced by sync_dag
+            pass
         else:
             table = RegistryLineageNode(
+                pipeline_id=source_id,
                 medallion_layer=layer,
                 table_name=table_name,
-                row_count=0,
-                transformation_template_path=file_path
+                row_count=0
             )
             self.session.add(table)
             
         self.session.commit()
         logger.info(f"Updated template pointer for {layer}.{table_name}")
 
-    def get_template_paths(self, source_id: UUID, layer: str) -> List[str]:
-        """Retrieves all template paths registered for a specific source and layer."""
+    def get_sql_templates(self, source_id: UUID, layer: str) -> List[str]:
+        """Retrieves all natively stored SQL templates for a specific source and layer."""
         tables = self.session.query(RegistryLineageNode).filter(
+            RegistryLineageNode.pipeline_id == source_id,
             RegistryLineageNode.medallion_layer == layer,
-            RegistryLineageNode.transformation_template_path.isnot(None)
+            RegistryLineageNode.sql_template.isnot(None)
         ).all()
-        return [t.transformation_template_path for t in tables]
+        return [t.sql_template for t in tables]
 
     def create_edges(self, edges: list) -> None:
         from src.infrastructure.registry.models import RegistryLineageEdge
@@ -122,8 +125,9 @@ class SqliteLineageCatalog(ILineageCatalog):
                 "id": str(n.id),
                 "table_name": n.table_name,
                 "layer": n.medallion_layer,
-                "template_path": n.transformation_template_path,
-                "row_count": n.row_count
+                "row_count": n.row_count,
+                "sql_template": n.sql_template,
+                "ui_metadata": n.ui_metadata or {}
             })
             
         edges = []
@@ -136,3 +140,76 @@ class SqliteLineageCatalog(ILineageCatalog):
             })
             
         return {"nodes": nodes, "edges": edges}
+
+    def sync_dag(self, source_id: UUID, graph_payload: dict) -> None:
+        """
+        Executes the atomic DAG compilation sync transaction.
+        Utilizes set math to upsert/delete nodes, and the 'Clean Slate' strategy for edges.
+        """
+        from src.infrastructure.registry.models import RegistryLineageEdge
+        
+        nodes_payload = graph_payload.get("nodes", [])
+        edges_payload = graph_payload.get("edges", [])
+        
+        incoming_node_ids = {UUID(str(n["id"])) for n in nodes_payload if "id" in n}
+        
+        # 1. Fetch existing nodes for this pipeline
+        db_nodes = self.session.query(RegistryLineageNode).filter(
+            RegistryLineageNode.pipeline_id == source_id
+        ).all()
+        existing_node_ids = {n.id for n in db_nodes}
+        
+        # 2. Node Diffing
+        nodes_to_delete = existing_node_ids - incoming_node_ids
+        # (Nodes to insert/update are handled by iterating the incoming payload)
+        
+        # 3. Process Deletions (Native Cascades will handle edges pointing to these)
+        if nodes_to_delete:
+            self.session.query(RegistryLineageNode).filter(
+                RegistryLineageNode.id.in_(nodes_to_delete)
+            ).delete(synchronize_session=False)
+            
+        # 4. Upsert Remaining Nodes
+        for n_data in nodes_payload:
+            node_id = UUID(str(n_data["id"]))
+            if node_id in existing_node_ids:
+                # Update
+                self.session.query(RegistryLineageNode).filter(
+                    RegistryLineageNode.id == node_id
+                ).update({
+                    "medallion_layer": n_data.get("layer"),
+                    "table_name": n_data.get("table_name"),
+                    "sql_template": n_data.get("sql_template"),
+                    "ui_metadata": n_data.get("ui_metadata", {})
+                }, synchronize_session=False)
+            else:
+                # Insert
+                db_node = RegistryLineageNode(
+                    id=node_id,
+                    pipeline_id=source_id,
+                    medallion_layer=n_data.get("layer"),
+                    table_name=n_data.get("table_name"),
+                    sql_template=n_data.get("sql_template"),
+                    ui_metadata=n_data.get("ui_metadata", {})
+                )
+                self.session.add(db_node)
+                
+        # 5. Clean Slate Edge Strategy
+        # Explicitly delete all remaining edges for this pipeline to guarantee no orphans
+        self.session.query(RegistryLineageEdge).filter(
+            RegistryLineageEdge.pipeline_id == source_id
+        ).delete(synchronize_session=False)
+        
+        # Bulk insert new edges
+        for e_data in edges_payload:
+            db_edge = RegistryLineageEdge(
+                id=UUID(str(e_data["id"])),
+                pipeline_id=source_id,
+                source_node_id=UUID(str(e_data["source_node_id"])),
+                target_node_id=UUID(str(e_data["target_node_id"]))
+            )
+            self.session.add(db_edge)
+            
+        # Commit the entire atomic transaction
+        self.session.commit()
+        logger.info(f"Successfully synced DAG for pipeline {source_id}")

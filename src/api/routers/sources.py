@@ -71,3 +71,15 @@ def patch_source(
         raise HTTPException(status_code=404, detail="Source not found")
     
     return repo.update_source(source_id, update_data)
+
+@router.delete("/{source_id}", response_model=DataSource)
+def archive_source(
+    source_id: UUID,
+    repo: IRegistryRepository = Depends(get_registry_repository)
+):
+    source = repo.get_source(source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+        
+    ds_update = DataSourceUpdate(state=SourceState.ARCHIVED)
+    return repo.update_source(source_id, ds_update)

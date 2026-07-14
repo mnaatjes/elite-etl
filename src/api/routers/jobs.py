@@ -30,3 +30,4 @@ def get_job_logs(
         "status": job.status,
         "logs": job.error_log
     }
+

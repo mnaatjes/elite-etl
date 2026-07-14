@@ -24,17 +24,17 @@ class GoldService:
                 logger.error(f"Source {source_id} not found in registry")
                 raise ValueError("Source not found")
                 
-            template_paths = self.catalog.get_template_paths(source_id, "gold")
-            if not template_paths:
-                logger.error(f"No Gold templates found in catalog for source: {source.name}")
+            sql_templates = self.catalog.get_sql_templates(source_id, "gold")
+            if not sql_templates:
+                logger.error(f"No Gold SQL templates found in catalog for source: {source.name}")
                 raise ValueError("No aggregation templates registered for source")
                 
-            logger.info(f"Found {len(template_paths)} templates for source: {source.name}")
-            for path in template_paths:
-                self.aggregator.execute_template(path, "gold")
+            logger.info(f"Found {len(sql_templates)} templates for source: {source.name}")
+            for sql in sql_templates:
+                self.aggregator.execute_sql(sql, "gold")
             
             metrics = {
-                "templates_executed": len(template_paths)
+                "templates_executed": len(sql_templates)
             }
             
             self.registry.update_job_status(job.id, JobStatus.SUCCESS, metrics=metrics)

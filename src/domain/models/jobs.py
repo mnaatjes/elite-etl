@@ -1,8 +1,8 @@
 from enum import Enum
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 class JobStatus(str, Enum):
     RUNNING = "running"
@@ -28,8 +28,7 @@ class JobRecord(BaseModel):
     status: JobStatus = Field(default=JobStatus.RUNNING)
     metrics: dict = Field(default_factory=dict)
     error_log: Optional[str] = None
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
+    
+    model_config = ConfigDict(from_attributes=True)

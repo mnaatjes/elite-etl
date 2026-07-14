@@ -2,7 +2,7 @@ from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, timezone
 
 from src.domain.interfaces.registry import IRegistryRepository
 from src.domain.models.registry import DataSource, DataSourceCreate, DataSourceUpdate, AnalyticsOverview
@@ -80,7 +80,7 @@ class SQLiteRegistryRepository(IRegistryRepository):
             db_job.metrics = metrics
             
         if status in [JobStatus.SUCCESS, JobStatus.FAILED, JobStatus.SKIPPED]:
-            db_job.completed_at = datetime.utcnow()
+            db_job.completed_at = datetime.now(timezone.utc)
             
         self.session.commit()
         self.session.refresh(db_job)

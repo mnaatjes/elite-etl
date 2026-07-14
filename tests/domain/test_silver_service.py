@@ -35,9 +35,7 @@ class MockRegistry:
         pass
 
 class MockCatalog:
-    def register_tables(self, source_id, layer, load_info):
-        pass
-    def get_template_paths(self, source_id, layer):
+    def get_sql_templates(self, source_id, layer):
         return ["test_source.sql"]
 
 class MockTransformer:
@@ -45,7 +43,7 @@ class MockTransformer:
         self.called = False
         self.should_fail = should_fail
         
-    def execute_template(self, template_path, layer="silver"):
+    def execute_sql(self, sql_template, layer="silver"):
         self.called = True
         if self.should_fail:
             raise Exception("Transformation error")

@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from uuid import uuid4
 from src.api.main import app
+from datetime import timezone
 
 from src.api.dependencies import get_registry_repository
 from src.domain.models.registry import DataSource
@@ -15,8 +16,8 @@ class MockRepo:
             download_uri="http://example.com", 
             schedule_interval_hours=24, 
             state="approved",
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
         
     def update_source_location(self, source_id, location):

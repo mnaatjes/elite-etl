@@ -222,3 +222,34 @@ def trigger_gold_aggregate(
         return {"message": "Gold aggregation completed", "job_id": str(job.id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/run/{source_id}")
+def unified_pipeline_run(
+    source_id: UUID,
+    # Ideally inject orchestrator dependency here. We mock the response for MVP.
+):
+    """
+    Instructs the overarching orchestrator to traverse the committed DAG and execute all required transformations.
+    Replaces discrete phase triggers (Silver/Gold).
+    """
+    return {
+        "source_id": str(source_id),
+        "status": "RUNNING",
+        "message": "Unified DAG execution initiated."
+    }
+
+@router.get("/status/{source_id}")
+def get_pipeline_status(
+    source_id: UUID,
+):
+    """
+    Lightweight HTTP Polling endpoint. Returns minimal JSON payload describing real-time 
+    DAG execution progress to satisfy the Vue MVP frontend without WebSockets.
+    """
+    # Mocking status check
+    return {
+        "source_id": str(source_id),
+        "status": "RUNNING",
+        "completed_nodes": ["stg_users", "stg_orders"],
+        "pending_nodes": ["fct_sales"]
+    }

@@ -58,11 +58,11 @@ The following routers in `src/api/routers/` must be created or refactored:
     *   *The "Clean Slate" Edge Strategy:* While nodes (containing valuable `sql_template` strings) are carefully diffed and upserted, edges only contain UUID pointers. To absolutely prevent edge conflicts during the sync, the API must immediately delete *all* existing edges for the `pipeline_id` at the start of the transaction, and then bulk-insert the exact array of edges provided in the new JSON payload.
 *   **Create Unified Pipeline Run Endpoint:**
     *   *Route:* `POST /api/v1/pipeline/run/{source_id}`
-    *   *File:* `src/api/routers/jobs.py`
+    *   *File:* `src/api/routers/pipeline.py`
     *   *Purpose:* Replaces individual phase triggers. Instructs the orchestrator to traverse the committed DAG and execute all required transformations.
 *   **Create Lightweight Polling Endpoint:**
     *   *Route:* `GET /api/v1/pipeline/status/{source_id}`
-    *   *File:* `src/api/routers/jobs.py`
+    *   *File:* `src/api/routers/pipeline.py`
     *   *Purpose:* An MVP alternative to WebSockets. Provides a fast, read-only JSON payload describing real-time DAG execution progress, queried repeatedly via Javascript `setInterval` on the frontend during a pipeline run.
 *   **Create Schema Diffing Engine Endpoint:**
     *   *Route:* `POST /api/v1/catalog/validate-schema/`

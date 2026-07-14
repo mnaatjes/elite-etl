@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 class IDataTransformer(ABC):
     @abstractmethod
-    def execute_template(self, template_path: str, layer: str = "silver") -> None:
+    def execute_sql(self, sql_template: str, layer: str = "silver") -> None:
         """
         Executes a SQL template from the filesystem.
         """

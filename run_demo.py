@@ -69,59 +69,38 @@ def run_pipeline():
         else:
             print(f"Failed to retrieve catalog: {response.text}")
 
+        # Silver/Gold
+        print("Triggering Unified Pipeline Run (Silver & Gold)...")
         
-        # Silver (HitL Dry Run & Execution)
-        print("Triggering Silver Normalization (Dry Run & Execution)...")
-        
-        # Test dry_run failure
-        print("  - Testing Invalid SQL Validation...")
-        bad_payload = {
-            "dry_run": True,
-            "transformations": [
+        # We need to simulate the DAG sync first since we no longer use file storage.
+        print("  - Syncing DAG payload...")
+        dag_payload = {
+            "nodes": [
                 {
-                    "target_table": "stg_spansh_systems",
-                    "sql": "SELECT non_existent_column FROM bronze.raw_spansh_systems;"
-                }
-            ]
-        }
-        res_bad = client.post(f"/api/v1/pipeline/silver/normalize/{source_id}", json=bad_payload)
-        print(f"    Expected Failure Result: {res_bad.status_code}")
-        
-        # Test actual execution
-        print("  - Executing Valid SQL Payload...")
-        good_payload = {
-            "dry_run": False,
-            "transformations": [
+                    "id": str(source_id),
+                    "layer": "silver",
+                    "table_name": "stg_spansh_systems",
+                    "sql_template": "CREATE TABLE IF NOT EXISTS silver.stg_spansh_systems AS SELECT * FROM bronze.raw_spansh_systems;"
+                },
                 {
-                    "target_table": "stg_spansh_systems",
-                    "sql": "CREATE TABLE IF NOT EXISTS silver.stg_spansh_systems AS SELECT * FROM bronze.raw_spansh_systems;"
+                    "id": "e4f8d9b1-6a2c-4e89-a2e1-4c6b5d9f0e1a",
+                    "layer": "gold",
+                    "table_name": "dim_spansh_systems",
+                    "sql_template": "CREATE TABLE IF NOT EXISTS gold.dim_spansh_systems AS SELECT * FROM silver.stg_spansh_systems;"
                 }
-            ]
+            ],
+            "edges": []
         }
-        res_good = client.post(f"/api/v1/pipeline/silver/normalize/{source_id}", json=good_payload)
-        if res_good.status_code == 202:
-            print(f"    Execution Result: {res_good.json()}")
+        res_dag = client.put(f"/api/v1/catalog/dag/{source_id}", json=dag_payload)
+        print(f"    DAG Sync Result: {res_dag.status_code}")
+        
+        # Test actual unified execution
+        print("  - Executing Unified Pipeline...")
+        res_run = client.post(f"/api/v1/pipeline/run/{source_id}")
+        if res_run.status_code == 200:
+            print(f"    Execution Result: {res_run.json()}")
         else:
-            print(f"    Execution Failed: {res_good.text}")
-
-        
-        # Gold
-        print("Triggering Gold Aggregation...")
-        
-        gold_payload = {
-            "dry_run": False,
-            "transformations": [
-                {
-                    "target_table": "dim_spansh_systems",
-                    "sql": "CREATE TABLE IF NOT EXISTS gold.dim_spansh_systems AS SELECT * FROM silver.stg_spansh_systems;"
-                }
-            ]
-        }
-        res_gold = client.post(f"/api/v1/pipeline/gold/aggregate/{source_id}", json=gold_payload)
-        if res_gold.status_code == 202:
-            print(f"    Execution Result: {res_gold.json()}")
-        else:
-            print(f"    Execution Failed: {res_gold.text}")
+            print(f"    Execution Failed: {res_run.text}")
             
         return source_id
 

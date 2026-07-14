@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 class IDataAggregator(ABC):
     @abstractmethod
-    def execute_template(self, template_path: str, layer: str = "gold") -> None:
+    def execute_sql(self, sql_template: str, layer: str = "gold") -> None:
         """
         Executes a SQL template from the filesystem.
         """

@@ -4,9 +4,61 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from src.domain.interfaces.catalog import ILineageCatalog
 from src.api.dependencies import get_lineage_catalog
-from src.infrastructure.database.inspector import get_active_tables
+from src.infrastructure.database.inspector import get_active_tables, dry_run_sql
+from src.domain.models.catalog import SchemaDiffRequest, SchemaDiffResponse, ColumnDiff, DiffType, DiffSeverity
+from src.domain.catalog.diff_engine import SchemaDiffEngine
+import psycopg2
 
 router = APIRouter()
+
+@router.post("/validate-schema/", response_model=SchemaDiffResponse)
+def validate_schema(
+    request: SchemaDiffRequest,
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+):
+    # 1. Fetch the known parent schema (upstream dependencies)
+    # For MVP, we simulate fetching the upstream columns. In full implementation,
+    # we would query the registry for the parent node's columns_schema based on edge relationships.
+    parent_schema = {"id": "UUID", "name": "VARCHAR", "email": "VARCHAR", "created_at": "TIMESTAMP"}
+    
+    # 2. Execute the Dry-Run
+    try:
+        compiled_schema = dry_run_sql(request.sql_template)
+    except psycopg2.Error as e:
+        # If the SQL fails to execute entirely (e.g. invalid syntax, referencing dropped column),
+        # this is a FATAL diff.
+        return SchemaDiffResponse(
+            is_fatal=True,
+            diffs=[ColumnDiff(
+                column_name="*",
+                diff_type=DiffType.SUBTRACTIVE,
+                severity=DiffSeverity.FATAL,
+                message=f"FATAL SQL Compilation Error: {str(e)}"
+            )]
+        )
+        
+    # 3. Calculate Diffs
+    diff_response = SchemaDiffEngine.calculate_diff(compiled_schema, parent_schema)
+    
+    return diff_response
+
+@router.put("/dag/{source_id}")
+def sync_dag(
+    source_id: UUID,
+    graph_payload: dict,
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+):
+    try:
+        # Utilizing the ILineageCatalog interface to execute the Sync Transaction
+        # Wait, the interface doesn't technically have sync_dag defined yet.
+        # But for this MVP Python layer, we can cast/assume or update the interface.
+        if hasattr(catalog, "sync_dag"):
+            catalog.sync_dag(source_id, graph_payload)
+        else:
+            raise NotImplementedError("Catalog implementation does not support sync_dag")
+        return {"status": "success", "message": "DAG successfully synchronized."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/lineage/{source_id}", response_model=dict)
 def get_lineage(
