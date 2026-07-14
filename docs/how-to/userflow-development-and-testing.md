@@ -21,13 +21,16 @@ To transition from static endpoints to a logical user flow, map the user's busin
 
 Use Mermaid.js (native to GitHub, VitePress, and most Markdown viewers) to write text-based, version-controlled sequence diagrams, paired with a metadata table. 
 
-**Full-Stack Mandate (White Box Diagrams):** Do not simply model HTTP requests as a black box. You must use a "White Box" architectural perspective. Explicitly model internal participants such as the `API Router`, `Domain Services`, and `Database` so that the frontend integration points and the backend side-effects (like DB writes) are completely transparent in a single flow.
+**Full-Stack Mandate (Dual Diagrams):** Userflow documentation should have BOTH a traditional Client-side API sequence diagram (Black Box) AND a deep Full-Stack Sequence Diagram (White Box). 
+- The **Client-side diagram** maps the strict external HTTP contract for frontend/test integration.
+- The **White-Box diagram** explicitly models internal participants such as the `API Router`, `Domain Services`, and `Database` so that the backend side-effects (like DB writes) are completely transparent.
 
 ### Example Markdown Strategy
 
 **FLOW-01: User Item Purchase**
 Triggers the complete flow from authentication to successful payment.
 
+#### 1. Client-Side API Sequence (Black Box)
 ```mermaid
 sequenceDiagram
     actor User
@@ -41,6 +44,23 @@ sequenceDiagram
     Cart-->>User: Return Cart ID & Total
     User->>Order: Pay (with Token & Cart ID)
     Order-->>User: Return Order Confirmation
+```
+
+#### 2. Full-Stack Architecture Sequence (White Box)
+```mermaid
+sequenceDiagram
+    actor VueClient
+    participant API as FastAPI Router
+    participant Domain as OrderService
+    participant DB as PostgreSQL
+
+    VueClient->>API: POST /api/v1/checkout {cart_id}
+    API->>Domain: Process Checkout
+    Domain->>DB: Verify Cart Items
+    Domain->>Domain: Charge Stripe API
+    Domain->>DB: INSERT INTO orders
+    DB-->>API: Return Order ID
+    API-->>VueClient: Return 200 (Order Confirmation)
 ```
 
 | Step | Endpoint | Payload / Params | Key Output Captured |

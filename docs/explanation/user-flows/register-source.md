@@ -9,6 +9,33 @@ last_updated_at: "2026-07-14"
 
 Triggers the complete flow from registering a new external data source through to its first unified pipeline execution.
 
+#### 1. Client-Side API Sequence (Black Box)
+```mermaid
+sequenceDiagram
+    actor VueClient
+    participant Source as POST /api/v1/sources/
+    participant Approve as PUT /api/v1/sources/{id}/approve
+    participant Sync as POST /api/v1/pipeline/bronze/sync/{id}
+    participant DAG as PUT /api/v1/catalog/dag/{id}
+    participant Run as POST /api/v1/pipeline/run/{id}
+    
+    VueClient->>Source: Submit {name, uri, interval, limit_mb}
+    Source-->>VueClient: Return 201 (DataSource Pending)
+    
+    VueClient->>Approve: Approve Pipeline
+    Approve-->>VueClient: Return 200 (DataSource Approved)
+    
+    VueClient->>Sync: Trigger Initial Extraction
+    Sync-->>VueClient: Return 202 (Job ID)
+    
+    VueClient->>DAG: Submit {nodes, edges}
+    DAG-->>VueClient: Return 200 (Success)
+    
+    VueClient->>Run: Execute Full Pipeline
+    Run-->>VueClient: Return 200 (Status: RUNNING)
+```
+
+#### 2. Full-Stack Architecture Sequence (White Box)
 ```mermaid
 sequenceDiagram
     actor VueClient
