@@ -21,11 +21,24 @@
 3. Orchestration
 
   - Happens during ETL/ELT 
-  - orchestration a
+  - Orchestration allows running of scripts during ETL/ELT Pipeline
+  - Tooling: Apache Airflow, AWS (EC2, Lambda, AWS Glue), Azure (ADF), Google (GCS, DataFlow)
 
-4. Data Lakehouse
+4. Data Warehouses & Data Lakehouses
+
+  - Data can be Structured, Unstructured, Semi-Structured
+  - Data Warehouse ONLY accepts Structured, Relational Data
+  - Data Lakehouses accept ALL kinds of Data
+  - Warehouse Tooling: BigQuery, RedShift, Azure, SynapseAnalytics, Snowflake
+  - Lakehouse Tooling: DeltaLake, ApacheIceburg, DataBricks
+
 5. Date Lineage
+
+  - Tooling: OpenLineage + Marquez, DataHub, OpenMetadata, ApacheAtlas, DataBricks, dbtDocs
+
 6. Dev Ops
 
-### Must Learn
+  - Data Engineers expected to maintain Data Lifecycle
+  - Model Deployment, CI/CD Pipelines, Automation
+  - Tooling: Terraform, Docker, Kubernetes, AzureDevops, git
 
