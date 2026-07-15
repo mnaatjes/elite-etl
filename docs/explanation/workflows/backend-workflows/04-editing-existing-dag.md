@@ -22,9 +22,9 @@ API receives `POST /api/v1/pipelines/{pipeline_id}/dags/` containing a mutated s
 
 ```mermaid
 sequenceDiagram
-    participant API as DAG API (Domain 3)
-    participant Validation as Domain Services
-    database DB as SQLite Registry
+    participant API as "DAG API (Domain 3)"
+    participant Validation as "Domain Services"
+    participant DB as "SQLite Registry"
 
     API->>Validation: Process Payload
     Validation-->>API: OK (Payload Valid)

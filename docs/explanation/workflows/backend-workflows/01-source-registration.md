@@ -22,10 +22,10 @@ API receives `POST /api/v1/sources/` containing the Source payload.
 
 ```mermaid
 sequenceDiagram
-    participant API as Source API Controller
-    participant Auth as Auth/Pydantic Guard
-    participant Service as Source Management Service
-    database DB as SQLite Registry
+    participant API as "Source API Controller"
+    participant Auth as "Auth/Pydantic Guard"
+    participant Service as "Source Management Service"
+    participant DB as "SQLite Registry"
 
     API->>Auth: Pass incoming JSON
     alt Invalid Schema

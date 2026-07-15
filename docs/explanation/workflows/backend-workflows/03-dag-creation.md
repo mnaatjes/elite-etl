@@ -23,10 +23,10 @@ API receives `POST /api/v1/pipelines/{pipeline_id}/dags/` containing the Nodes a
 
 ```mermaid
 sequenceDiagram
-    participant API as DAG API (Domain 3)
-    participant Acyclic as Acyclic Service
-    participant Schema as Schema Propagation Service
-    database DB as SQLite Registry
+    participant API as "DAG API (Domain 3)"
+    participant Acyclic as "Acyclic Service"
+    participant Schema as "Schema Propagation Service"
+    participant DB as "SQLite Registry"
 
     API->>Acyclic: Validate Edges
     Acyclic-->>API: OK

@@ -22,10 +22,10 @@ API receives `POST /api/v1/pipelines/` containing the Pipeline shell payload.
 
 ```mermaid
 sequenceDiagram
-    participant API as Pipeline API Controller
-    participant Auth as Pydantic Guard (Cron Validation)
-    participant Service as Pipeline Admin Service
-    database DB as SQLite Registry
+    participant API as "Pipeline API Controller"
+    participant Auth as "Pydantic Guard (Cron Validation)"
+    participant Service as "Pipeline Admin Service"
+    participant DB as "SQLite Registry"
 
     API->>Auth: Pass JSON
     Auth->>Service: Validated Pipeline DTO
