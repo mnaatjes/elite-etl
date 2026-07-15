@@ -50,6 +50,6 @@
     *   Node schemas from `catalog.py` properly hydrate the DAG canvas. 
     *   Styling and interactions (pan/zoom) have been optimized for large tables. 
     *   The "Deploy & Execute Pipeline" logic has been decoupled from the component and hoisted to the main interface.
-*   **Next Immediate Task (E2E Integration Testing):** We need to run a manual end-to-end integration test from the dashboard UI to confirm data correctly flows from the API to the PostgreSQL backend when a pipeline is deployed and executed.
+*   **Next Immediate Task (Config-Driven Architecture Refactor):** Shift pipeline execution model to a strict Config-Driven Architecture. Decouple schema discovery from physical data loading by replacing the onboarding bronze sync with a dedicated ephemeral `POST /api/v1/sources/{source_id}/discover` endpoint. Realign APIs to support lazy instantiation of Postgres tables until the DAG is executed.
 *   **Git Strategy:** Agents must adhere to the Git strategy defined in `docs/explanation/release-and-integration-roadmap.md` (merge to main, prune legacy branches, branch off for decoupling).
 *   **AGY Conversation State:** The current active conversation UUID is `b0566c18-f4a2-46d3-bc92-0f6417f30c0f`. Use this UUID to restore context if the terminal session is interrupted.
