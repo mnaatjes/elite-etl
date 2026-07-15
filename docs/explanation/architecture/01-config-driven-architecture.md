@@ -1,56 +1,44 @@
 ---
-title: "ADR: Config-Driven Architecture & Ephemeral Discovery"
-tags: ["adr", "architecture", "discovery", "dlt", "config-driven"]
-status: "approved"
+title: "ADR 01: Config-Driven Architecture & Ephemeral Discovery"
+tags: ["adr", "architecture", "discovery", "dlt", "config-driven", "hexagonal"]
 created_at: "2026-07-15"
 last_updated_at: "2026-07-15"
 ---
 
-### Diagnostic: Architectural Paradigm Shift
+# ADR 01: Config-Driven Architecture & Ephemeral Discovery
 
-Schema Discovery and Data Ingestion are two fundamentally different domain responsibilities. By forcing the `bronze/sync/` endpoint to handle schema discovery (even via a micro-sample), we are unnecessarily coupling configuration logic to physical infrastructure I/O.
+This foundational Architecture Decision Record establishes the core paradigm of the Elite Data Pipeline: **The strict separation of logical configuration from physical execution infrastructure.**
 
-### The Best Practice (Config-Driven Architecture)
+### 1. The Architectural Paradigm Shift
 
-In best-practice ELT architectures:
+In legacy ELT systems, registering a data source often triggered an immediate physical ingestion, creating tables in the data warehouse before a pipeline was even fully defined. This coupled configuration logic tightly to physical I/O, leading to expensive onboarding flows and fragile schema mutability hazards.
 
-1. **Discovery is Ephemeral**: Tooling like `dlt` (or Singer taps) can extract data in-memory, evaluate it, and yield a JSON Schema (or "Catalog") without ever touching the destination database.
-2. **DAGs are Pure Configuration**: The UI should build the DAG based entirely on that ephemeral JSON Schema catalog.
-3. **Lazy Instantiation**: The PostgreSQL tables should not exist until the moment the pipeline is explicitly commanded to execute (`RUN`).
+We are adopting a strictly **Config-Driven Architecture**, guided by Hexagonal Architectural boundaries (Ports & Adapters).
 
-### Required Technical Refactoring
+### 2. Core Principles
 
-To align with this best practice, we must decouple discovery from ingestion. Below are the explicit technical changes required across the stack.
+#### A. Discovery is Ephemeral
+Schema introspection and data ingestion are fundamentally different domain responsibilities. Tooling like `dlt` (or Singer taps) extracts data in-memory, evaluates it, and yields a JSON Schema (or "Catalog") *without* touching the destination PostgreSQL database. 
+*   **Implementation:** The API endpoint `POST /api/v1/sources/{source_id}/discover` triggers this ephemeral discovery, extracting the physical reality into a versioned `source_schemas` ledger (See ADR 05).
 
-#### 1. API Changes & Endpoints
+#### B. DAGs are Pure Configuration
+The UI Canvas must build the execution Directed Acyclic Graph (DAG) based entirely on the ephemeral JSON Schema catalogs stored in SQLite. 
+*   **Implementation:** The mutation endpoint `POST /api/v1/pipelines/{pipeline_id}/dags/` handles pure mathematical graphing and semantic SQL validation. No warehouse queries are executed during authoring (See ADR 07).
 
-*   **Create**: `POST /api/v1/sources/{source_id}/discover`
-    *   **Purpose**: Ephemeral schema discovery. Performs zero PostgreSQL writes.
-    *   **Payload**: None.
-    *   **Response**: Returns the inferred JSON Catalog Schema.
-*   **Deprecate/Internalize**: `POST /api/v1/pipeline/bronze/sync/{source_id}`
-    *   **Purpose**: Remove from the public onboarding flow. It will be relegated to an internal private function called by the Orchestrator during a full `RUN`.
-*   **Preserve**: `PUT /api/v1/catalog/dag/{source_id}` and `POST /api/v1/pipeline/run/{source_id}` remain functionally identical on the API surface.
+#### C. Lazy Instantiation of Infrastructure
+The physical PostgreSQL tables (Bronze, Silver, Gold) do not exist during the onboarding or DAG authoring phases. The data warehouse is only touched at the exact moment the orchestrator executes a scheduled pipeline run.
 
-#### 2. Tooling Changes
+### 3. Impact on System Domains
 
-*   **DLT Invocation**: No new external tools are required. However, we will change how `dlt` is invoked. We will utilize `dlt`'s schema inference by running the extract pipeline in memory and extracting the `pipeline.default_schema.to_dict()` output, bypassing the load phase.
+To support this config-driven approach, the system is strictly decoupled into independent domains (detailed in subsequent ADRs):
 
-#### 3. Python Service & Domain Changes
+1.  **Domain 1: Source Management (The "What"):** Catalogs physical origins and manages schema drift versioning. Has zero awareness of pipelines.
+2.  **Domain 2: Pipeline Administration (The "When"):** Manages the execution shell, chron schedules, and execution history (`pipeline_runs`). Has zero awareness of sources.
+3.  **Domain 3: DAG Configuration (The "How"):** Manages the mathematical logic, enforcing structural integrity (Kahn's Algorithm, BFS) and semantic column propagation.
+4.  **Domain 4: Backend-for-Frontend (BFF Facade):** Aggregates the domains into asymmetrical payloads (`GET /api/v1/editor/workspace/{pipeline_id}`) for the UI, shielding the client from internal domain isolation constraints.
 
-*   **New Service**: `src/domain/discovery_service.py`
-    *   **Responsibility**: Encapsulate the logic for executing a micro-extraction via `dlt` in memory, parsing the inferred schema, and returning a structured JSON Catalog.
-*   **Refactored Service**: `src/domain/orchestrator_service.py`
-    *   **Responsibility**: The orchestrator must now handle the initial physical instantiation of Bronze tables during the first `RUN`, as they will no longer be created during onboarding.
+### 4. Summary of Deprecations
 
-#### 4. Model & Class Changes
-
-*   **Pydantic Models**: Add new Pydantic models to strongly type the JSON Catalog response from the `discover` endpoint (e.g., `CatalogSchemaResponse`, `TableSchema`, `ColumnSchema`).
-*   **Source Model**: Ensure the `Source` state machine (or database model) accounts for the discovery phase, ensuring seamless transition into the DAG authoring stage.
-
-### Impact on User Flows
-
-*   Flow 01 (Registration) ends with Approval.
-*   Flow 02 (DAG Authoring) begins with `POST /sources/{id}/discover` to get the schema, and ends with `PUT /catalog/dag/` to save the configuration.
-
-This approach is significantly cleaner, cheaper, and perfectly adheres to the Hexagonal Architecture constraint by entirely isolating the DAG configuration domain from the Postgres infrastructure domain.
+This ADR supersedes older monolithic ingestion flows.
+*   **DEPRECATED:** `POST /api/v1/pipeline/bronze/sync/{source_id}` is completely removed from the public API. It is relegated to an internal private function called exclusively by the Pipeline Orchestrator at runtime.
+*   **DEPRECATED:** `PUT /api/v1/catalog/dag/{source_id}` is removed in favor of the decoupled `POST /api/v1/pipelines/{pipeline_id}/dags/` mutation endpoint.
