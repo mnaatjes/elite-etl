@@ -30,6 +30,7 @@ erDiagram
         string state
         timestamp last_discovered_at
         string discovery_cron
+        json last_discovery_status
     }
     
     SOURCE_SCHEMAS {

@@ -13,7 +13,7 @@ This document defines the architectural logic for managing external data Sources
 A **Source** is the physical origin entity (e.g., PostgreSQL DB, REST API). It is fully decoupled from the Pipeline. A single DAG may consume N Sources, migrating away from legacy constraints.
 
 #### Database Tables
-*   **`sources` Table:** Contains `id` (UUID, PK), `name`, `uri`, `state`, `last_discovered_at`, `discovery_cron` (String).
+*   **`sources` Table:** Contains `id` (UUID, PK), `name`, `uri`, `state`, `last_discovered_at`, `discovery_cron` (String), `last_discovery_status` (JSON).
 *   **`source_schemas` Table:** Contains `id` (UUID, PK), `source_id` (UUID, FK), `version_number` (Integer), `catalog` (JSON), `created_at` (Timestamp).
 
 ### 2. Schema Versioning (The Mutability Hazard)
@@ -42,10 +42,17 @@ Strictly responsible for cataloging external systems and tracking their schema e
 *   **`GET /api/v1/sources/`**: Retrieves a list of all registered sources.
 *   **`POST /api/v1/sources/`**: Registers the URI and authentication strategy.
 *   **`GET /api/v1/sources/{source_id}`**: Retrieves metadata for a specific source.
-*   **`DELETE /api/v1/sources/{source_id}`**: Removes a source and its schemas.
+*   **`PATCH /api/v1/sources/{source_id}`**: Updates source properties. **CRITICAL:** If the client patches the `uri` property, this endpoint must orchestrate a forced, synchronous Discovery run to validate the new connection and potentially generate a new schema version, invalidating reliant DAGs if necessary.
+*   **`DELETE /api/v1/sources/{source_id}`**: Soft-archives a source (sets `state` to `ARCHIVED`). Does *not* delete versioned schemas.
 *   **`POST /api/v1/sources/{source_id}/discover`**: The Mutator. Triggers the expensive extraction and generates a new schema version in the `source_schemas` table.
 *   **`GET /api/v1/sources/{source_id}/schemas/latest`**: The Fetcher. Fast SQLite-read endpoint to fetch the cached JSON catalog.
 
 ### 5. Supplemental API Endpoints Required for Drift Handling
 To fully support the approved drift handling policies, the ecosystem will require the following endpoint additions:
 *   **`GET /api/v1/pipelines/{pipeline_id}/runs`**: Retrieves execution history from the `pipeline_runs` table. Clients parse the `error_payload` to identify specific missing columns when `SchemaDriftError` occurs.
+
+### 6. Source Lifecycle Management Checks
+These checks should be integrated into the Domain Services governing Source mutation and validation:
+1.  **Orphan Warning (Soft-Delete Check):** Integrated into `DELETE /sources/{id}`. Before allowing `state = ARCHIVED`, query the `nodes` table. Return `409 Conflict` with a warning if active DAGs depend on this source.
+2.  **Health-Ping (Pre-flight):** Integrated into the pipeline orchestrator immediately before triggering DAG execution (`POST /pipeline/run`). Executes a lightweight `SELECT 1` against the source URI. If it fails, log to `pipeline_runs` without spinning up heavy extraction containers.
+3.  **Discovery Error Transparency:** Integrated into the Discovery cron job. When a connection fails, write the explicit stack trace (e.g., timeout, auth failure) to the `last_discovery_status` JSON column so the UI can display actionable resolution steps.
