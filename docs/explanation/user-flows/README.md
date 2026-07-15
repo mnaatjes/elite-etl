@@ -2,7 +2,7 @@
 title: "User Flows Overview"
 tags: ["user-flows", "index"]
 created_at: "2026-07-14"
-last_updated_at: "2026-07-14"
+last_updated_at: "2026-07-15"
 ---
 
 # User Flows Overview
@@ -10,10 +10,10 @@ last_updated_at: "2026-07-14"
 This directory contains integrated user flows representing the core operations of the Elite Data Pipeline UI.
 
 ## [FLOW-01: Source Registration & Approval](register-source.md)
-The Administrative Onboarding Phase where a pipeline is configured, approved, and a micro-sample is extracted to prepare for DAG authoring.
+The Administrative Onboarding Phase where a data source is registered, securely approved, and an ephemeral discovery is performed to prepare for DAG authoring.
 1. `POST /api/v1/sources/`
 2. `PUT /api/v1/sources/{source_id}/approve`
-3. `POST /api/v1/pipeline/bronze/sync/{source_id}` (Micro-sample)
+3. `POST /api/v1/sources/{source_id}/discover`
 
 ## [FLOW-02: Interactive DAG Authoring & Validation](dag-authoring.md)
 The cycle a data engineer goes through while writing SQL templates in the frontend offcanvas editor to ensure they won't break the pipeline.
