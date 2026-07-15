@@ -108,11 +108,11 @@ This sequence diagram illustrates how the `POST /api/v1/pipelines/{pipeline_id}/
 ```mermaid
 sequenceDiagram
     actor Client as UI/Client
-    participant API as DAG Mutation API<br>(Domain 3)
-    participant Acyclic as Acyclic Validation<br>Service
-    participant Conn as Connectivity Check<br>Service
-    participant Schema as Schema Propagation<br>Service
-    database DB as SQLite Registry
+    participant API as "DAG Mutation API<br>(Domain 3)"
+    participant Acyclic as "Acyclic Validation<br>Service"
+    participant Conn as "Connectivity Check<br>Service"
+    participant Schema as "Schema Propagation<br>Service"
+    participant DB as "SQLite Registry"
 
     Client->>API: POST /pipelines/{id}/dags/<br>(Minimal JSON)
     
