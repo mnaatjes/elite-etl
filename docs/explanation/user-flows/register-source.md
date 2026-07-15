@@ -70,6 +70,26 @@ sequenceDiagram
 | 02 | `PUT /api/v1/sources/{source_id}/approve` | Empty | `{"id": "...", "state": "APPROVED"}` | `state: APPROVED` |
 | 03 | `POST /api/v1/sources/{source_id}/discover` | Empty | `{"tables": {"raw_users": {"columns": {"id": "integer", "name": "string"}}}}` | JSON Catalog Schema |
 
+## API Endpoints Definition
+
+### 1. Register Source
+*   **Method**: `POST`
+*   **URI**: `/api/v1/sources/`
+*   **Request Payload**: `{"name": "string", "uri": "string", "interval_hrs": "integer", "source_type": "string", "auth_strategy": "string", "credentials_id": "string"}`
+*   **Response Payload**: `{"id": "uuid", "state": "PENDING", "metadata": {"estimated_size_mb": "float"}}`
+
+### 2. Approve Source
+*   **Method**: `PUT`
+*   **URI**: `/api/v1/sources/{source_id}/approve`
+*   **Request Payload**: None
+*   **Response Payload**: `{"id": "uuid", "state": "APPROVED"}`
+
+### 3. Ephemeral Schema Discovery
+*   **Method**: `POST`
+*   **URI**: `/api/v1/sources/{source_id}/discover`
+*   **Request Payload**: None
+*   **Response Payload**: `{"tables": {"<table_name>": {"columns": {"<col_name>": "<type>"}}}}`
+
 ## TODO
 - [ ] Implement `HTTP HEAD` request in Domain Service to extract `Content-Length` (MB) for the Pending response payload to assist in HitL approval UX.
 - [ ] Develop way of processing different URIs and accept APIs (beyond static file downloads).
