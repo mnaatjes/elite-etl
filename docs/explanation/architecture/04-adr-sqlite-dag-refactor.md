@@ -36,9 +36,11 @@ The SQLite database serves as the exclusive Configuration Registry.
 To properly enforce DAG logic and math, the SQLite database and corresponding Pydantic models must decouple the pipeline into strict Graph components.
 
 #### Database Tables
+*   **`sources` Table:** Contains `id` (PK), `name`, `uri`, `state`, `last_discovered_at`.
+*   **`source_schemas` Table:** Contains `id` (PK), `source_id` (FK), `version_number`, `catalog` (JSON).
 *   **`pipelines` Table:** Contains `id` (PK), `name`, `schedule_cron`, `created_at`, `is_paused`.
 *   **`dags` Table:** Contains `id` (PK), `pipeline_id` (FK), `version_number`, `created_at`.
-*   **`nodes` Table:** Contains `id` (PK), `dag_id` (FK), `name`, `layer`, `sql_template`.
+*   **`nodes` Table:** Contains `id` (PK), `dag_id` (FK), `name`, `layer`, `sql_template`, `inferred_schema` (JSON).
 *   **`edges` Table:** Contains `id` (PK), `dag_id` (FK), `source_node_id`, `target_node_id`.
 
 #### Domain Services & Derived Properties
@@ -58,14 +60,20 @@ To ensure a pristine Hexagonal Architecture, the API namespaces must strictly mi
 
 #### Domain 1: Source Management (The "What")
 Strictly responsible for cataloging external systems and tracking their schema evolution over time. It has zero awareness of Pipelines or DAGs.
+*   **`GET /api/v1/sources/`**: Retrieves a list of all registered sources.
 *   **`POST /api/v1/sources/`**: Registers the URI and authentication strategy.
+*   **`GET /api/v1/sources/{source_id}`**: Retrieves metadata for a specific source.
+*   **`DELETE /api/v1/sources/{source_id}`**: Removes a source and its schemas.
 *   **`POST /api/v1/sources/{source_id}/discover`**: The Mutator. Triggers the expensive `dlt` extraction and generates a new schema version in the `source_schemas` table.
 *   **`GET /api/v1/sources/{source_id}/schemas/latest`**: The Fetcher. Fast SQLite-read endpoint to fetch the cached JSON catalog without executing `dlt`. The client uses this payload to construct Bronze root nodes.
 
 #### Domain 2: Pipeline Administration (The "When")
 Strictly responsible for the operational shell. A Pipeline mathematically exists without a DAG (an empty shell waiting for logic).
+*   **`GET /api/v1/pipelines/`**: Retrieves a list of all pipelines.
 *   **`POST /api/v1/pipelines/`**: Creates the operational Pipeline shell (Name, Schedule, Metadata).
+*   **`GET /api/v1/pipelines/{pipeline_id}`**: Retrieves a specific pipeline and its execution state.
 *   **`PATCH /api/v1/pipelines/{pipeline_id}`**: Pauses/Unpauses the schedule or modifies metadata.
+*   **`DELETE /api/v1/pipelines/{pipeline_id}`**: Deletes the pipeline and all associated DAGs.
 
 #### Domain 3: DAG Configuration (The "How")
 Strictly responsible for the mathematical execution graph.
