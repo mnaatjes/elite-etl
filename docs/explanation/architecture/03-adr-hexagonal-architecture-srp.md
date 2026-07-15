@@ -1,6 +1,7 @@
 ---
 title: "ADR: Hexagonal Architecture & Single Responsibility Principle"
 tags: ["adr", "architecture", "hexagonal", "srp", "anti-patterns"]
+status: "approved"
 created_at: "2026-07-15"
 last_updated_at: "2026-07-15"
 ---
