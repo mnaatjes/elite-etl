@@ -4,10 +4,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.api.main import app
-from src.infrastructure.registry.models import Base
+from src.infrastructure.registry.models import Base, RegistryDataSource, RegistryJobRecord, RegistryLineageNode, RegistryLineageEdge
 from src.infrastructure.registry.database import get_registry_session
 
 from sqlalchemy.pool import StaticPool
+from sqlalchemy import text
 
 # Setup in-memory DB for tests
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -25,13 +26,22 @@ def override_get_registry_session():
     finally:
         db.close()
 
-app.dependency_overrides[get_registry_session] = override_get_registry_session
+@pytest.fixture(autouse=True)
+def override_session_dependency():
+    app.dependency_overrides[get_registry_session] = override_get_registry_session
+    yield
+    app.dependency_overrides.pop(get_registry_session, None)
 
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    with TestingSessionLocal() as session:
+        session.execute(text("DELETE FROM data_sources"))
+        session.execute(text("DELETE FROM job_records"))
+        session.execute(text("DELETE FROM lineage_nodes"))
+        session.execute(text("DELETE FROM lineage_edges"))
+        session.commit()
 
 client = TestClient(app)
 

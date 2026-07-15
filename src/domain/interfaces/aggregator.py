@@ -2,8 +2,15 @@ from abc import ABC, abstractmethod
 
 class IDataAggregator(ABC):
     @abstractmethod
-    def aggregate_table(self, source_name: str) -> None:
+    def execute_sql(self, sql_template: str, layer: str = "gold") -> None:
         """
-        Models Silver staging tables into Gold facts and dimensions.
+        Executes a SQL template from the filesystem.
+        """
+        pass
+        
+    @abstractmethod
+    def validate_sql(self, sql: str) -> None:
+        """
+        Validates a SQL string in a transaction.
         """
         pass

@@ -1,0 +1,1 @@
+# Silver Medallion SQL Templates

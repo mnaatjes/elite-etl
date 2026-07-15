@@ -7,7 +7,7 @@ class DltDataLoader(IDataLoader):
     def __init__(self, dataset_name: str = "bronze"):
         self.dataset_name = dataset_name
 
-    def load_stream(self, table_name: str, stream: Generator[bytes, None, None]) -> None:
+    def load_stream(self, table_name: str, stream: Generator[bytes, None, None]) -> dict:
         def dict_generator():
             import zlib
             decompressor = zlib.decompressobj(32 + zlib.MAX_WBITS)
@@ -46,4 +46,21 @@ class DltDataLoader(IDataLoader):
             destination="postgres",
             dataset_name=self.dataset_name
         )
-        pipeline.run(dict_generator(), table_name=table_name)
+        load_info = pipeline.run(dict_generator(), table_name=table_name)
+        
+        # Extract tables and their column schemas directly from DLT's memory
+        tables_data = []
+        for t_name, t_schema in pipeline.default_schema.tables.items():
+            if not t_name.startswith("_dlt"):
+                columns = []
+                for col_name, col_meta in t_schema.get("columns", {}).items():
+                    columns.append({
+                        "name": col_name,
+                        "data_type": col_meta.get("data_type", "unknown")
+                    })
+                tables_data.append({
+                    "table_name": t_name,
+                    "columns": columns
+                })
+                
+        return {"tables": tables_data}

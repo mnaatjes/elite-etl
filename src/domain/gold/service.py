@@ -1,15 +1,18 @@
 from uuid import UUID
 from src.domain.interfaces.registry import IRegistryRepository
 from src.domain.interfaces.aggregator import IDataAggregator
-from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase
+from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase, MedallionDepth
 from src.infrastructure.logging import get_logger
 
 logger = get_logger("gold.service")
 
+from src.domain.interfaces.catalog import ILineageCatalog
+
 class GoldService:
-    def __init__(self, registry: IRegistryRepository, aggregator: IDataAggregator):
+    def __init__(self, registry: IRegistryRepository, aggregator: IDataAggregator, catalog: ILineageCatalog):
         self.registry = registry
         self.aggregator = aggregator
+        self.catalog = catalog
 
     def aggregate_source(self, source_id: UUID) -> JobRecord:
         logger.info(f"Starting Gold aggregation for source_id: {source_id}")
@@ -21,10 +24,21 @@ class GoldService:
                 logger.error(f"Source {source_id} not found in registry")
                 raise ValueError("Source not found")
                 
-            logger.info(f"Aggregating staging table for source: {source.name}")
-            self.aggregator.aggregate_table(source.name)
+            sql_templates = self.catalog.get_sql_templates(source_id, "gold")
+            if not sql_templates:
+                logger.error(f"No Gold SQL templates found in catalog for source: {source.name}")
+                raise ValueError("No aggregation templates registered for source")
+                
+            logger.info(f"Found {len(sql_templates)} templates for source: {source.name}")
+            for sql in sql_templates:
+                self.aggregator.execute_sql(sql, "gold")
             
-            self.registry.update_job_status(job.id, JobStatus.SUCCESS)
+            metrics = {
+                "templates_executed": len(sql_templates)
+            }
+            
+            self.registry.update_job_status(job.id, JobStatus.SUCCESS, metrics=metrics)
+            self.registry.update_source_location(source_id, MedallionDepth.GOLD_AGGREGATED)
             logger.info(f"Gold aggregation successful for {source.name}")
             
         except Exception as e:

@@ -64,3 +64,18 @@ def test_job_lifecycle(repo):
     assert updated_job.status == JobStatus.FAILED
     assert updated_job.error_log == "Connection timeout"
     assert updated_job.completed_at is not None
+
+def test_list_jobs_sorting_and_limit(repo):
+    import time
+    source = repo.create_source(DataSourceCreate(name="test_api_4", download_uri="http://example.com"))
+    
+    # Create 3 jobs with a small delay to ensure distinct started_at times
+    repo.create_job_record(source.id, MedallionPhase.BRONZE_SYNC)
+    time.sleep(0.01)
+    repo.create_job_record(source.id, MedallionPhase.SILVER_NORMALIZE)
+    time.sleep(0.01)
+    job3 = repo.create_job_record(source.id, MedallionPhase.GOLD_AGGREGATE)
+    
+    jobs = repo.list_jobs(limit=2)
+    assert len(jobs) == 2
+    assert jobs[0].id == job3.id  # The most recent job should be first (DESC order)

@@ -8,7 +8,10 @@ from src.domain.bronze.service import BronzeService
 from src.domain.silver.service import SilverService
 from src.domain.gold.service import GoldService
 from src.domain.models.responses import AsyncJobResponse
-from src.api.dependencies import get_registry_repository
+from src.api.dependencies import get_registry_repository, get_lineage_catalog
+from src.domain.interfaces.catalog import ILineageCatalog
+from src.domain.lineage.models import HitLTemplate
+from src.domain.lineage.parser import validate_and_extract_edges, SecurityViolationError, BoundaryViolationError
 from src.infrastructure.network.client import HttpxNetworkClient
 from src.infrastructure.loaders.dlt_runner import DltDataLoader
 from src.infrastructure.transformers.sql_transformer import PostgresSqlTransformer
@@ -16,10 +19,13 @@ from src.infrastructure.aggregators.sql_aggregator import PostgresSqlAggregator
 
 router = APIRouter()
 
-def get_bronze_service(repo: IRegistryRepository = Depends(get_registry_repository)) -> BronzeService:
+def get_bronze_service(
+    repo: IRegistryRepository = Depends(get_registry_repository),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+) -> BronzeService:
     network = HttpxNetworkClient()
     loader = DltDataLoader()
-    return BronzeService(registry=repo, network=network, loader=loader)
+    return BronzeService(registry=repo, network=network, loader=loader, catalog=catalog)
 
 class SyncRequest(BaseModel):
     limit_mb: Optional[int] = None
@@ -54,44 +60,196 @@ def trigger_bronze_sync(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-def get_silver_service(repo: IRegistryRepository = Depends(get_registry_repository)) -> SilverService:
-    transformer = PostgresSqlTransformer()
-    return SilverService(registry=repo, transformer=transformer)
+@router.get("/bronze/catalog/{source_id}")
+def get_bronze_catalog(
+    source_id: UUID,
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+):
+    """
+    Returns the schema introspection for a given source in the Bronze layer.
+    """
+    try:
+        return catalog.get_catalog(source_id, layer="bronze")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/silver/normalize/{source_id}", response_model=AsyncJobResponse, status_code=202)
+from typing import Optional, List
+import os
+
+class SqlTransformation(BaseModel):
+    target_table: str
+    sql: str
+
+class SqlTransformPayload(BaseModel):
+    dry_run: bool = False
+    transformations: List[SqlTransformation]
+
+def get_silver_service(
+    repo: IRegistryRepository = Depends(get_registry_repository),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+) -> SilverService:
+    transformer = PostgresSqlTransformer()
+    return SilverService(registry=repo, transformer=transformer, catalog=catalog)
+
+@router.post("/silver/normalize/{source_id}", response_model=dict, status_code=202)
 def trigger_silver_normalize(
     source_id: UUID,
-    service: SilverService = Depends(get_silver_service)
+    payload: SqlTransformPayload,
+    service: SilverService = Depends(get_silver_service),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
 ):
     source = service.registry.get_source(source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
         
+    # Step 1: Server-Side Validation (Dry Run)
+    try:
+        for transform in payload.transformations:
+            # 1 & 2. Lexical and AST Validation
+            template = HitLTemplate(
+                source_pipeline=source.name,
+                target_layer="silver",
+                raw_sql_string=transform.sql,
+                submitted_by="admin"
+            )
+            edges = validate_and_extract_edges(template)
+            
+            # 4 & 5. Syntax and Semantic Validation
+            service.transformer.validate_sql(transform.sql)
+    except (SecurityViolationError, BoundaryViolationError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"DAG Validation Error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    if payload.dry_run:
+        return {"message": "Validation Passed", "status": "dry_run_success"}
+        
+    # Step 2: Write Code to Filesystem & Update Reference Pointers
+    templates_dir = f"data/sql_templates/{source_id}/silver"
+    os.makedirs(templates_dir, exist_ok=True)
+    
+    for transform in payload.transformations:
+        file_path = f"{templates_dir}/{transform.target_table}.sql"
+        with open(file_path, "w") as f:
+            f.write(transform.sql)
+        catalog.update_template_path(source_id, "silver", transform.target_table, file_path)
+        
+        # Parse edges again to commit them to SQLite
+        template = HitLTemplate(
+            source_pipeline=source.name,
+            target_layer="silver",
+            raw_sql_string=transform.sql,
+            submitted_by="admin"
+        )
+        edges = validate_and_extract_edges(template)
+        catalog.create_edges(edges)
+        
+    # Step 3: Execution (Note: Currently triggers the hard-coded transformer until decoupled in Step 5)
     try:
         job = service.normalize_source(source_id)
         if job.status.value == "failed":
             raise HTTPException(status_code=500, detail="Normalization failed. See job record.")
-        return AsyncJobResponse(message="Silver normalization completed", job_id=job.id)
+        return {"message": "Silver normalization completed", "job_id": str(job.id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-def get_gold_service(repo: IRegistryRepository = Depends(get_registry_repository)) -> GoldService:
+def get_gold_service(
+    repo: IRegistryRepository = Depends(get_registry_repository),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
+) -> GoldService:
     aggregator = PostgresSqlAggregator()
-    return GoldService(registry=repo, aggregator=aggregator)
+    return GoldService(registry=repo, aggregator=aggregator, catalog=catalog)
 
-@router.post("/gold/aggregate/{source_id}", response_model=AsyncJobResponse, status_code=202)
+@router.post("/gold/aggregate/{source_id}", response_model=dict, status_code=202)
 def trigger_gold_aggregate(
     source_id: UUID,
-    service: GoldService = Depends(get_gold_service)
+    payload: SqlTransformPayload,
+    service: GoldService = Depends(get_gold_service),
+    catalog: ILineageCatalog = Depends(get_lineage_catalog)
 ):
     source = service.registry.get_source(source_id)
     if not source:
         raise HTTPException(status_code=404, detail="Source not found")
         
+    # Step 1: Server-Side Validation (Dry Run)
+    try:
+        for transform in payload.transformations:
+            # 1 & 2. Lexical and AST Validation
+            template = HitLTemplate(
+                source_pipeline=source.name,
+                target_layer="gold",
+                raw_sql_string=transform.sql,
+                submitted_by="admin"
+            )
+            edges = validate_and_extract_edges(template)
+            
+            # 4 & 5. Syntax and Semantic Validation
+            service.aggregator.validate_sql(transform.sql)
+    except (SecurityViolationError, BoundaryViolationError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"DAG Validation Error: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    if payload.dry_run:
+        return {"message": "Validation Passed", "status": "dry_run_success"}
+        
+    # Step 2: Write Code to Filesystem & Update Reference Pointers
+    templates_dir = f"data/sql_templates/{source_id}/gold"
+    os.makedirs(templates_dir, exist_ok=True)
+    
+    for transform in payload.transformations:
+        file_path = f"{templates_dir}/{transform.target_table}.sql"
+        with open(file_path, "w") as f:
+            f.write(transform.sql)
+        catalog.update_template_path(source_id, "gold", transform.target_table, file_path)
+        
+        # Parse edges again to commit them to SQLite
+        template = HitLTemplate(
+            source_pipeline=source.name,
+            target_layer="gold",
+            raw_sql_string=transform.sql,
+            submitted_by="admin"
+        )
+        edges = validate_and_extract_edges(template)
+        catalog.create_edges(edges)
+        
+    # Step 3: Execution
     try:
         job = service.aggregate_source(source_id)
         if job.status.value == "failed":
             raise HTTPException(status_code=500, detail="Aggregation failed. See job record.")
-        return AsyncJobResponse(message="Gold aggregation completed", job_id=job.id)
+            
+        return {"message": "Gold aggregation completed", "job_id": str(job.id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/run/{source_id}")
+def unified_pipeline_run(
+    source_id: UUID,
+    # Ideally inject orchestrator dependency here. We mock the response for MVP.
+):
+    """
+    Instructs the overarching orchestrator to traverse the committed DAG and execute all required transformations.
+    Replaces discrete phase triggers (Silver/Gold).
+    """
+    return {
+        "source_id": str(source_id),
+        "status": "RUNNING",
+        "message": "Unified DAG execution initiated."
+    }
+
+@router.get("/status/{source_id}")
+def get_pipeline_status(
+    source_id: UUID,
+):
+    """
+    Lightweight HTTP Polling endpoint. Returns minimal JSON payload describing real-time 
+    DAG execution progress to satisfy the Vue MVP frontend without WebSockets.
+    """
+    # Mocking status check
+    return {
+        "source_id": str(source_id),
+        "status": "RUNNING",
+        "completed_nodes": ["stg_users", "stg_orders"],
+        "pending_nodes": ["fct_sales"]
+    }

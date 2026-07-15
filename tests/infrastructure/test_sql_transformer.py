@@ -1,6 +1,6 @@
 import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 from src.infrastructure.transformers.sql_transformer import PostgresSqlTransformer
 
 @patch("src.infrastructure.transformers.sql_transformer.psycopg2.connect")
@@ -14,20 +14,22 @@ def test_postgres_sql_transformer_success(mock_connect):
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
     
     transformer = PostgresSqlTransformer()
-    transformer.normalize_table("test_source")
+    transformer.execute_sql("CREATE TABLE silver.stg_test_source AS\nSELECT * FROM bronze.raw_test_source")
     
     assert mock_connect.called
     assert mock_conn.cursor.called
     assert mock_cursor.execute.called
     
     # Verify the SQL constructed correctly
-    executed_query = mock_cursor.execute.call_args[0][0]
-    assert "CREATE SCHEMA IF NOT EXISTS silver" in executed_query
-    assert "CREATE TABLE silver.stg_test_source AS" in executed_query
-    assert "SELECT * FROM bronze.raw_test_source" in executed_query
+    calls = mock_cursor.execute.call_args_list
+    schema_query = calls[0][0][0]
+    table_query = calls[1][0][0]
+    assert "CREATE SCHEMA IF NOT EXISTS silver" in schema_query
+    assert "CREATE TABLE silver.stg_test_source AS" in table_query
+    assert "SELECT * FROM bronze.raw_test_source" in table_query
 
 @patch.dict(os.environ, {}, clear=True)
 def test_postgres_sql_transformer_missing_env():
     transformer = PostgresSqlTransformer()
     with pytest.raises(ValueError, match="DESTINATION__POSTGRES__CREDENTIALS not set"):
-        transformer.normalize_table("test_source")
+        transformer.execute_sql("SELECT 1")

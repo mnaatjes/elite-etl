@@ -5,22 +5,26 @@ from uuid import UUID
 from src.domain.interfaces.registry import IRegistryRepository
 from src.domain.interfaces.network import INetworkClient
 from src.domain.interfaces.loader import IDataLoader
-from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase
+from src.domain.models.jobs import JobRecord, JobStatus, MedallionPhase, MedallionDepth
 from src.domain.models.registry import DataSourceUpdate
 from src.infrastructure.logging import get_logger
 
 logger = get_logger("bronze.service")
+
+from src.domain.interfaces.catalog import ILineageCatalog
 
 class BronzeService:
     def __init__(
         self,
         registry: IRegistryRepository,
         network: INetworkClient,
-        loader: IDataLoader
+        loader: IDataLoader,
+        catalog: ILineageCatalog
     ):
         self.registry = registry
         self.network = network
         self.loader = loader
+        self.catalog = catalog
 
     def sync_source(self, source_id: UUID, limit_mb: Optional[int] = None) -> JobRecord:
         logger.info(f"Starting Bronze sync for source_id: {source_id}")
@@ -60,7 +64,10 @@ class BronzeService:
             # Load into Bronze
             table_name = f"raw_{source.name}"
             logger.info(f"Loading data into PostgreSQL table: {table_name}")
-            self.loader.load_stream(table_name, wrapped_stream)
+            load_info_dict = self.loader.load_stream(table_name, wrapped_stream)
+            
+            # Register tables in catalog
+            self.catalog.register_tables(source_id, "bronze", load_info_dict)
             
             # Update Registry with new metadata
             final_hash = sha256_hash.hexdigest()
@@ -68,7 +75,14 @@ class BronzeService:
             update = DataSourceUpdate(etag=remote_etag, sha256_hash=final_hash)
             self.registry.update_source(source_id, update)
             
-            self.registry.update_job_status(job.id, JobStatus.SUCCESS)
+            # Compile metrics
+            metrics = {
+                "tables_generated": len(load_info_dict.get("tables", [])),
+                "etag_hash": final_hash
+            }
+            
+            self.registry.update_job_status(job.id, JobStatus.SUCCESS, metrics=metrics)
+            self.registry.update_source_location(source_id, MedallionDepth.BRONZE_SYNCED)
             logger.info(f"Bronze sync successful for {source_id}")
 
         except Exception as e:

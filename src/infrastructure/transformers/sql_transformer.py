@@ -6,35 +6,46 @@ from src.infrastructure.logging import get_logger
 logger = get_logger("transformer.sql")
 
 class PostgresSqlTransformer(IDataTransformer):
-    def normalize_table(self, source_name: str) -> None:
+    def execute_sql(self, sql_template: str, layer: str = "silver") -> None:
         db_url = os.getenv("DESTINATION__POSTGRES__CREDENTIALS")
         if not db_url:
             raise ValueError("DESTINATION__POSTGRES__CREDENTIALS not set in environment")
             
-        logger.info(f"Connecting to PostgreSQL for Silver normalization of {source_name}")
-        
-        raw_schema = "bronze"
-        raw_table = f"raw_{source_name}"
-        silver_schema = "silver"
-        silver_table = f"stg_{source_name}"
-        
-        # In a full dbt implementation, this would be a templated macro.
-        # For the prototype, we utilize raw SQL to demonstrate the Silver landing pattern.
-        # This copies data from bronze, enabling schema changes without losing raw history.
-        query = f"""
-            CREATE SCHEMA IF NOT EXISTS {silver_schema};
-            DROP TABLE IF EXISTS {silver_schema}.{silver_table};
-            CREATE TABLE {silver_schema}.{silver_table} AS
-            SELECT * FROM {raw_schema}.{raw_table};
-        """
+        logger.info(f"Connecting to PostgreSQL to execute natively stored SQL template for layer: {layer}")
         
         try:
             with psycopg2.connect(db_url) as conn:
                 with conn.cursor() as cur:
-                    logger.debug(f"Executing Normalization Query:\n{query}")
-                    cur.execute(query)
-                # explicit commit is required outside the cursor but inside the connection, wait, psycopg2 context manager commits on exit automatically
-            logger.info(f"Silver normalization complete: {silver_schema}.{silver_table}")
+                    cur.execute(f"CREATE SCHEMA IF NOT EXISTS {layer};")
+                    logger.debug(f"Executing Template Query:\n{sql_template}")
+                    cur.execute(sql_template)
+            logger.info("Execution complete for template.")
         except psycopg2.Error as e:
             logger.error(f"PostgreSQL execution failed: {e.pgerror or str(e)}")
             raise
+            
+    def validate_sql(self, sql: str) -> None:
+        """Executes SQL in a transaction and rolls back to validate syntax and schema."""
+        db_url = os.getenv("DESTINATION__POSTGRES__CREDENTIALS")
+        if not db_url:
+            raise ValueError("DESTINATION__POSTGRES__CREDENTIALS not set in environment")
+            
+        logger.info("Executing server-side validation (Dry Run)")
+        try:
+            with psycopg2.connect(db_url) as conn:
+                # Disable autocommit so we can rollback
+                conn.autocommit = False
+                with conn.cursor() as cur:
+                    # Ensure schemas exist for validation
+                    cur.execute("CREATE SCHEMA IF NOT EXISTS silver;")
+                    cur.execute("CREATE SCHEMA IF NOT EXISTS gold;")
+                    
+                    # Execute the user SQL
+                    cur.execute(sql)
+                    
+                    # Force a rollback so no tables are actually created or modified
+                    conn.rollback()
+                logger.info("Validation successful. Transaction rolled back.")
+        except psycopg2.Error as e:
+            logger.error(f"Validation failed: {e.pgerror or str(e)}")
+            raise ValueError(f"SQL Validation Error: {e.pgerror or str(e)}")
