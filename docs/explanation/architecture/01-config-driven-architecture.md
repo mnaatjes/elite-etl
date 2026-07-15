@@ -1,6 +1,7 @@
 ---
 title: "ADR: Config-Driven Architecture & Ephemeral Discovery"
 tags: ["adr", "architecture", "discovery", "dlt", "config-driven"]
+status: "approved"
 created_at: "2026-07-15"
 last_updated_at: "2026-07-15"
 ---
