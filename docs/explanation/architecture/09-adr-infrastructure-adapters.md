@@ -13,6 +13,8 @@ Following the completion of the five-phase implementation plan outlined in ADR 0
 ## Decision
 We will implement the **Repository Pattern** to act as the concrete Infrastructure Adapters in our Hexagonal Architecture. This layer will completely decouple the API controllers from raw SQLAlchemy transactions, allowing the system to physically persist and retrieve data to/from the SQLite database while satisfying the strict Pydantic response contracts.
 
+**STRICT RULE:** The `src/infrastructure/registry/repository.py` file is strictly and exclusively reserved for the **SQLite Control Plane** (managing configurations, DAGs, and pipeline metadata). It must never be used to execute queries against the actual data warehouse. If the system needs to communicate with the PostgreSQL data plane for actual ETL execution, an entirely distinct repository adapter (e.g., `PostgresExecutionRepository`) must be created in a separate module to prevent cross-contamination between configuration state and warehouse data.
+
 ## Implementation Blueprint
 
 ### 1. The Repository Layer (`repository.py`)
@@ -42,4 +44,4 @@ We will implement the **Repository Pattern** to act as the concrete Infrastructu
 
 ## Consequences
 - **Positive:** Completing this blueprint will resolve all remaining `pytest` failures. The End-to-End lifecycle will be fully operational, proving the architecture designed in ADRs 01-08 functions correctly in reality.
-- **Negative:** Introduces direct database coupling to the repository layer, requiring strict discipline during future modifications to ensure business validation logic never leaks into these physical queries.
+- **Negative:** Introduces direct database coupling to the repository layer, requiring strict discipline during future modifications to ensure business validation logic never leaks into these physical queries. Additionally, enforcing the strict split between the SQLite Control Plane repository and future PostgreSQL Data Plane repositories requires diligent architectural oversight.
