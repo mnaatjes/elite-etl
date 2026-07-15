@@ -23,6 +23,7 @@ Mathematical properties are derived dynamically by dedicated Domain Services to 
 *   **Degree Calculation & Node Identity:** Calculates `in_degree` and `out_degree` dynamically at runtime to identify Roots and Leafs.
 *   **Abandoned Edge Prevention:** SQLite schema enforces `ON DELETE CASCADE` Foreign Keys for `source_node_id` and `target_node_id`.
 *   **Orphaned Node Prevention:** A Graph Connectivity Check (e.g., BFS) rejects disconnected SQL scripts during the payload validation phase.
+*   **Schema Propagation & Validation Service:** Computes column-level semantic integrity across the graph. It propagates `inferred_schema` outputs from source nodes down through the edges. If a node's `sql_template` references a column not provided by its parent (e.g., due to schema drift), the service flags the broken `node_id`, `edges_affected`, and `columns_affected`.
 
 ### 3. API Domain 3: DAG Configuration (The "How")
 Strictly responsible for the mathematical execution graph.
