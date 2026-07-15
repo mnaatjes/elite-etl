@@ -18,9 +18,9 @@ Triggers the Administrative Onboarding Phase where a data source is registered, 
 ```mermaid
 sequenceDiagram
     actor VueClient
-    participant Source as POST /api/v1/sources/
-    participant Approve as PUT /api/v1/sources/{id}/approve
-    participant Discover as POST /api/v1/sources/{id}/discover
+    participant Source as "POST /api/v1/sources/"
+    participant Approve as "PUT /api/v1/sources/{id}/approve"
+    participant Discover as "POST /api/v1/sources/{id}/discover"
     
     VueClient->>Source: Submit Source Config Payload
     Source-->>VueClient: Return 201 (DataSource Pending)
