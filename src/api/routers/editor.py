@@ -31,9 +31,12 @@ def get_editor_workspace(pipeline_id: uuid.UUID, db: Session = Depends(get_regis
                     # In Phase 5 E2E, we pass the schema_id directly in the test payload
                     # so we fetch the schema row to get the physical catalog
                     from src.infrastructure.registry.models import SourceSchema
-                    schema = db.query(SourceSchema).filter(SourceSchema.id == node.bound_schema_id).first()
-                    if schema:
-                        mock_catalogs[str(node.bound_schema_id)] = schema.catalog
+                    original_schema = db.query(SourceSchema).filter(SourceSchema.id == node.bound_schema_id).first()
+                    if original_schema:
+                        latest_schema = SourceRepository.get_latest_schema(db, original_schema.source_id)
+                        if latest_schema and latest_schema.id != original_schema.id:
+                            raise SchemaDriftError(f"Schema drift detected: V{original_schema.version_number} -> V{latest_schema.version_number}. Column missing.")
+                        mock_catalogs[str(node.bound_schema_id)] = original_schema.catalog
 
             # Build NodeCreate Pydantic models from the DB models to feed the pure domain logic
             from src.api.schemas import NodeCreate

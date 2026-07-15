@@ -22,7 +22,8 @@ def create_or_update_dag(pipeline_id: uuid.UUID, dag_payload: DAGCreate, db: Ses
         mock_catalogs = {}
         for node in dag_payload.nodes:
             if node.type.upper() == "BRONZE" and node.bound_schema_id:
-                schema_model = SourceRepository.get_latest_schema(db, node.bound_schema_id)
+                from src.infrastructure.registry.models import SourceSchema
+                schema_model = db.query(SourceSchema).filter(SourceSchema.id == node.bound_schema_id).first()
                 if schema_model:
                     # In a true system, we might query by the schema's exact ID, but for phase 5,
                     # the ID they pass is likely the source_id, so we'll just mock the fetch if it fails.
