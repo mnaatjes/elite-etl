@@ -44,12 +44,16 @@
 ### 5. Execution & Writing Mandate
 * **Approval Override:** When the user explicitly states "approved", "generate the code", or gives clear consent to a proposed design or model, agents are authorized to immediately bypass manual implementation recommendations and write the code directly to the filesystem using the appropriate tools.
 
-## 6. Next Session Context / Handoff Notes (July 14, 2026)
-*   **Backend API Completed (Declarative DAG Builder):** The API upgrade plan is fully executed. We implemented the Pydantic models, the SQLite node/edge registry logic (`sync_dag`), the Python `set` arithmetic `SchemaDiffEngine`, and the `dry_run_sql` Postgres introspection method.
-*   **Frontend Migration Completed:** The frontend `elite_dashboard` Vue.js repository has been successfully updated with the Phase 3 & 4 plan. `PipelineGraph.vue` using Vue Flow is fully integrated. 
-    *   Node schemas from `catalog.py` properly hydrate the DAG canvas. 
-    *   Styling and interactions (pan/zoom) have been optimized for large tables. 
-    *   The "Deploy & Execute Pipeline" logic has been decoupled from the component and hoisted to the main interface.
-*   **Next Immediate Task (Config-Driven Architecture Refactor):** Shift pipeline execution model to a strict Config-Driven Architecture. Decouple schema discovery from physical data loading by replacing the onboarding bronze sync with a dedicated ephemeral `POST /api/v1/sources/{source_id}/discover` endpoint. Realign APIs to support lazy instantiation of Postgres tables until the DAG is executed.
-*   **Git Strategy:** Agents must adhere to the Git strategy defined in `docs/explanation/release-and-integration-roadmap.md` (merge to main, prune legacy branches, branch off for decoupling).
-*   **AGY Conversation State:** The current active conversation UUID is `b0566c18-f4a2-46d3-bc92-0f6417f30c0f`. Use this UUID to restore context if the terminal session is interrupted.
+## 6. Next Session Context / Handoff Notes (July 15, 2026)
+*   **Architecture Phase - Config-Driven API:** Transitioned into a documentation-first design phase for the strict Config-Driven API and SQLite refactoring. 
+*   **Completed Documentation:**
+    *   Authored `docs/explanation/architecture/02-adr-hitl-rules-and-boundaries.md` (HitL logic).
+    *   Authored `docs/explanation/architecture/03-adr-hexagonal-architecture-srp.md` (Hexagonal principles).
+    *   Authored `docs/explanation/architecture/04-adr-sqlite-dag-refactor.md` which finalized:
+        *   N:1 Source to Pipeline relationship.
+        *   Versioned `source_schemas` table to prevent schema drift hazards.
+        *   Explicit JSON payload contract (`nodes` and `edges`) for DAG modeling.
+        *   Strict Domain routing: Source Management (The "What"), Pipeline Admin (The "When"), and DAG Config (The "How").
+        *   Backend-for-Frontend (BFF) Facade endpoint for UI workspace aggregation.
+*   **Next Immediate Task (API Implementation):** Begin implementing the API routes and Pydantic models defined in `04-adr-sqlite-dag-refactor.md`, starting with the `source_schemas` table migration and the `POST /api/v1/sources/{source_id}/discover` Ephemeral Discovery logic.
+*   **AGY Conversation State:** The current active conversation UUID is `6ab95042-ed69-411d-b455-90c2b62ba4e5`. Use this UUID to restore context if the terminal session is interrupted.
