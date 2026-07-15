@@ -23,3 +23,20 @@ We establish a strict ontological boundary between a Pipeline and a DAG.
 The SQLite database serves as the exclusive Configuration Registry. 
 *   **Isolation:** SQL templates and schema definitions are stored as purely logical configuration payloads within the SQLite database.
 *   **Execution:** The execution infrastructure (Postgres/Orchestrator) reads from this SQLite registry at runtime. The API will not rely on the physical Postgres layer to derive DAG state or SQL templates.
+
+### 4. DAG Modeling & Database Relations
+
+To properly enforce DAG logic and math, the SQLite database and corresponding Pydantic models must decouple the pipeline into strict Graph components.
+
+#### Database Tables
+*   **`pipelines` Table:** Contains `id` (PK), `name`, `schedule_cron`, `created_at`, `is_paused`.
+*   **`dags` Table:** Contains `id` (PK), `pipeline_id` (FK), `version_number`, `created_at`.
+*   **`nodes` Table:** Contains `id` (PK), `dag_id` (FK), `name`, `layer`, `sql_template`.
+*   **`edges` Table:** Contains `id` (PK), `dag_id` (FK), `source_node_id`, `target_node_id`.
+
+#### Domain Services & Derived Properties
+Mathematical properties of the DAG must never be stored as static columns in the database to prevent state drift. They must be derived or validated dynamically by dedicated Domain Services:
+
+*   **Acyclic Validation Service:** Before a new DAG version is persisted to SQLite, the API backend must execute a topological sort algorithm (e.g., Kahn's Algorithm) across the submitted nodes and edges. If a structural cycle is detected, the payload is immediately rejected.
+*   **Degree Calculation Service:** `in_degree` and `out_degree` are derived at runtime. The service calculates these by counting foreign key references in the `edges` table (e.g., `in_degree` is the count of edges where `target_node_id` equals the node in question).
+*   **Node Identity Derivation:** Identity is dynamically derived from the degree calculations. A node is a **Root** if its `in_degree` is exactly 0. A node is a **Leaf** if its `out_degree` is exactly 0.
