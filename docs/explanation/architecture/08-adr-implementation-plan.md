@@ -9,6 +9,11 @@ last_updated_at: "2026-07-15"
 
 This document dictates the rigid, phased implementation roadmap for executing the architecture defined in ADRs 01 through 07. It enforces the testing mandates established in the core directives, ensuring all code is covered by `pytest` before advancing.
 
+## Phase 0: Technical Debt & Deprecation Purge
+**Goal:** Ensure a clean slate by removing legacy implementations that violate the new Hexagonal Architecture boundaries.
+1.  **Code Deletion:** Systematically remove any unused or deprecated API endpoints (e.g., legacy `/bronze/sync`), outdated SQLite tables, legacy Pydantic settings, and obsolete properties that no longer align with the data model defined in ADRs 04-07.
+2.  **Tests (`pytest`):** Verify that the existing test suite executes successfully after the purge, ensuring no active required logic was accidentally removed before building the new domains.
+
 ## Phase 1: Persistence & Data Transfer Objects (DTOs)
 **Goal:** Establish the foundational data layer and strict Hexagonal Ports.
 1.  **SQLite Implementation:** Define the `sources`, `source_schemas`, `pipelines`, `pipeline_runs`, `dags`, `nodes`, and `edges` tables using your ORM (e.g., SQLAlchemy) or raw SQLite schemas, enforcing UUID primary keys and `ON DELETE CASCADE` foreign keys.
