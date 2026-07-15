@@ -1,362 +1,210 @@
 ---
 title: "Elite API Reference"
 tags: ["api", "reference", "endpoints"]
-created_at: "2026-07-14"
-last_updated_at: "2026-07-14"
+created_at: "2026-07-15"
+last_updated_at: "2026-07-15"
 ---
 
 # Elite Pipeline API Reference
 
-This document provides a comprehensive list of all exposed REST endpoints for the Elite Data Pipeline, adhering to the standard Markdown API format. 
+This document provides a comprehensive list of all exposed REST endpoints for the Elite Data Pipeline, adhering strictly to the Hexagonal Architecture domains defined in ADRs 05, 06, and 07.
 
 * **Base URL:** `/api/v1`
 * **Authentication:** Currently not enforced for MVP internal network usage.
 
 ---
 
-## Sources
+## Domain 1: Source Management
 
-### POST /api/v1/sources/
-Creates a new data source registry entry.
-
-* **Authentication Required:** No
-
-#### Request Body
-```json
-{
-  "name": "string",
-  "uri": "string",
-  "interval_hrs": 24
-}
-```
-
-#### Responses
-**Status: 201 Created**
-```json
-{
-  "id": "uuid",
-  "name": "string",
-  "uri": "string",
-  "interval_hrs": 24,
-  "state": "PENDING"
-}
-```
+Strictly responsible for cataloging external systems and tracking their schema evolution over time.
 
 ### GET /api/v1/sources/
 Retrieves a list of all registered data sources.
 
-* **Authentication Required:** No
+* **Responses:**
+  * **200 OK**: Array of Source objects.
 
-#### Responses
-**Status: 200 OK**
-```json
-[
+### POST /api/v1/sources/
+Registers a new physical origin entity (URI and authentication strategy).
+
+* **Request Body:**
+  ```json
   {
-    "id": "uuid",
     "name": "string",
-    "state": "APPROVED"
+    "uri": "string",
+    "discovery_cron": "string"
   }
-]
-```
+  ```
+* **Responses:**
+  * **201 Created**: Returns created Source object with UUID.
 
 ### GET /api/v1/sources/{source_id}
-Retrieves a specific data source by its UUID.
+Retrieves metadata for a specific source.
 
-* **Authentication Required:** No
-
-#### Responses
-**Status: 200 OK** (Returns DataSource object)
-**Status: 404 Not Found**
-
-### PUT /api/v1/sources/{source_id}/schedule
-Updates the execution schedule interval for a specific source.
-
-* **Authentication Required:** No
-
-#### Request Body
-```json
-{
-  "schedule_interval_hours": 12
-}
-```
-
-#### Responses
-**Status: 200 OK** (Returns updated DataSource)
-
-### PUT /api/v1/sources/{source_id}/approve
-Approves a pending data source, changing its state to `APPROVED`.
-
-* **Authentication Required:** No
-
-#### Responses
-**Status: 200 OK** (Returns updated DataSource)
-
-### PATCH /api/v1/sources/{source_id}
-Partially updates a data source.
-
-* **Authentication Required:** No
-
-#### Request Body
-```json
-{
-  "name": "new_name",
-  "state": "PAUSED"
-}
-```
-
-#### Responses
-**Status: 200 OK** (Returns updated DataSource)
+* **Responses:**
+  * **200 OK**: Source object.
 
 ### DELETE /api/v1/sources/{source_id}
-Soft-archives a data source (sets state to `ARCHIVED`).
+Removes a source and all of its associated versioned schemas.
 
-* **Authentication Required:** No
+* **Responses:**
+  * **200 OK**: Confirmation message.
 
-#### Responses
-**Status: 200 OK** (Returns updated DataSource)
+### POST /api/v1/sources/{source_id}/discover
+The Mutator. Triggers an expensive physical extraction and generates a new schema version in the `source_schemas` table if physical drift occurred.
+
+* **Responses:**
+  * **202 Accepted**: Schema discovery initiated.
+
+### GET /api/v1/sources/{source_id}/schemas/latest
+The Fetcher. Fast SQLite-read endpoint to fetch the cached JSON catalog of the absolute latest discovered schema version.
+
+* **Responses:**
+  * **200 OK**: JSON schema catalog.
 
 ---
 
-## Pipeline Operations
+## Domain 2: Pipeline Administration
 
-### POST /api/v1/pipeline/bronze/sync/{source_id}
-Triggers an asynchronous bronze sync job for the specified source.
+Strictly responsible for the operational shell, schedule attributes, and execution tracking.
 
-* **Authentication Required:** No
+### GET /api/v1/pipelines/
+Retrieves a list of all operational pipeline shells.
 
-#### Request Body
-```json
-{
-  "limit_mb": 100
-}
-```
+* **Responses:**
+  * **200 OK**: Array of Pipeline objects.
 
-#### Responses
-**Status: 202 Accepted**
-```json
-{
-  "message": "Bronze sync completed",
-  "job_id": "uuid"
-}
-```
+### POST /api/v1/pipelines/
+Creates the operational Pipeline shell.
 
-### GET /api/v1/pipeline/bronze/catalog/{source_id}
-Returns the schema introspection for a given source in the Bronze layer.
+* **Request Body:**
+  ```json
+  {
+    "name": "string",
+    "schedule_cron": "string"
+  }
+  ```
+* **Responses:**
+  * **201 Created**: Returns created Pipeline object with UUID.
 
-* **Authentication Required:** No
+### GET /api/v1/pipelines/{pipeline_id}
+Retrieves a specific pipeline and its immediate execution state.
 
-#### Responses
-**Status: 200 OK** (Returns Schema object)
+* **Responses:**
+  * **200 OK**: Pipeline object.
 
-### POST /api/v1/pipeline/silver/normalize/{source_id}
-Validates (dry-run) or executes Silver layer SQL transformations.
+### PATCH /api/v1/pipelines/{pipeline_id}
+Pauses/Unpauses the schedule or modifies metadata.
 
-* **Authentication Required:** No
+* **Request Body:**
+  ```json
+  {
+    "is_paused": true
+  }
+  ```
+* **Responses:**
+  * **200 OK**: Updated Pipeline object.
 
-#### Request Body
-```json
-{
-  "dry_run": false,
-  "transformations": [
+### DELETE /api/v1/pipelines/{pipeline_id}
+Deletes the pipeline and all associated DAGs.
+
+* **Responses:**
+  * **200 OK**: Confirmation message.
+
+### GET /api/v1/pipelines/{pipeline_id}/runs
+Retrieves execution history from the `pipeline_runs` table, including any logged schema drift errors.
+
+* **Responses:**
+  * **200 OK**: 
+  ```json
+  [
     {
-      "target_table": "string",
-      "sql": "string"
+      "id": "uuid",
+      "status": "FAILED",
+      "error_type": "SchemaDriftError",
+      "error_payload": { "missing_columns": ["phone_number"] }
     }
   ]
-}
-```
+  ```
 
-#### Responses
-**Status: 202 Accepted** (Execution) or **200 OK** (Dry Run)
-**Status: 400 Bad Request** (DAG Validation Error)
+---
 
-### POST /api/v1/pipeline/gold/aggregate/{source_id}
-Validates (dry-run) or executes Gold layer SQL aggregations.
+## Domain 3: DAG Configuration
 
-* **Authentication Required:** No
+Strictly responsible for the mathematical execution graph logic.
 
-#### Request Body (Same as Silver)
-```json
-{
-  "dry_run": false,
-  "transformations": [
-    {
-      "target_table": "string",
-      "sql": "string"
+### GET /api/v1/pipelines/{pipeline_id}/dags/latest
+Retrieves the currently active DAG topology (Nodes, Edges, SQL Templates) for orchestrator execution.
+
+* **Responses:**
+  * **200 OK**: Current DAG object.
+
+### POST /api/v1/pipelines/{pipeline_id}/dags/
+The exclusive DAG mutation endpoint. Receives a complete JSON payload representing the structural graph (Whole-State Replacement). Executes Acyclic Validation, Connectivity Checks, and Schema Propagation Validation synchronously.
+
+* **Request Body:**
+  ```json
+  {
+    "description": "Standard user normalization pipeline",
+    "nodes": [
+      {
+        "id": "uuid", 
+        "bound_schema_id": "uuid", 
+        "name": "bronze_raw_users",
+        "layer": "bronze",
+        "sql_template": "SELECT * FROM public.users"
+      }
+    ],
+    "edges": [
+      {
+        "source_node_id": "uuid",
+        "target_node_id": "uuid"
+      }
+    ]
+  }
+  ```
+* **Responses:**
+  * **201 Created**: Successfully validated and committed DAG version.
+  * **400 Bad Request**: Contains `validation_errors` (e.g., Cycles, Orphans, Semantic Schema Mismatch).
+
+---
+
+## Domain 4: Backend-for-Frontend (BFF) Facade
+
+Aggregates domains to prevent UI N+1 queries during DAG authoring and pipeline inspection.
+
+### GET /api/v1/editor/workspace/{pipeline_id}
+Internally fetches the active DAG, pipeline metadata, and available Source schemas. Propagates asynchronous drift validations.
+
+* **Responses:**
+  * **200 OK**: Asymmetrical read-optimized payload.
+  ```json
+  {
+    "pipeline": {
+      "id": "uuid",
+      "name": "Standard ETL"
+    },
+    "available_sources": [
+      {
+        "source_id": "uuid",
+        "latest_schema_version_id": "uuid",
+        "version_number": 2,
+        "schema_catalog": { }
+      }
+    ],
+    "active_dag": {
+      "version": "1.0",
+      "is_valid": false,
+      "nodes": [ ],
+      "edges": [ ],
+      "validation_errors": [
+        {
+          "node_id": "uuid",
+          "error_type": "SchemaDrift",
+          "columns_affected": ["phone_number"],
+          "edges_affected": ["uuid"]
+        }
+      ]
     }
-  ]
-}
-```
-
-#### Responses
-**Status: 202 Accepted** (Execution) or **200 OK** (Dry Run)
-
-### POST /api/v1/pipeline/run/{source_id}
-Instructs the orchestrator to traverse the committed DAG and execute all unified transformations.
-
-* **Authentication Required:** No
-
-#### Responses
-**Status: 200 OK**
-```json
-{
-  "source_id": "uuid",
-  "status": "RUNNING",
-  "message": "Unified DAG execution initiated."
-}
-```
-
-### GET /api/v1/pipeline/status/{source_id}
-Lightweight polling endpoint to fetch real-time DAG execution progress.
-
-* **Authentication Required:** No
-
-#### Responses
-**Status: 200 OK**
-```json
-{
-  "source_id": "uuid",
-  "status": "RUNNING",
-  "completed_nodes": ["stg_users"],
-  "pending_nodes": ["fct_sales"]
-}
-```
-
----
-
-## Jobs
-
-### GET /api/v1/jobs/
-Retrieves a list of job records, optionally filtered by source.
-
-* **Authentication Required:** No
-
-#### Query Parameters
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `source_id` | UUID | No | Filter jobs by source. |
-| `limit` | Integer | No | Max results. Default: 50. |
-
-#### Responses
-**Status: 200 OK** (Returns Array of JobRecords)
-
-### GET /api/v1/jobs/{job_id}/logs
-Retrieves the execution logs for a specific job.
-
-* **Authentication Required:** No
-
-#### Responses
-**Status: 200 OK**
-```json
-{
-  "job_id": "uuid",
-  "status": "FAILED",
-  "logs": "Error stack trace..."
-}
-```
-
----
-
-## Catalog
-
-### POST /api/v1/catalog/validate-schema/
-Runs the Schema Diff Engine against a provided SQL template to detect drift.
-
-* **Authentication Required:** No
-
-#### Request Body
-```json
-{
-  "sql_template": "SELECT * FROM bronze_table"
-}
-```
-
-#### Responses
-**Status: 200 OK** (Returns SchemaDiffResponse with severity and column diffs)
-
-### PUT /api/v1/catalog/dag/{source_id}
-Commits and synchronizes the fully structured DAG JSON payload to the SQLite registry.
-
-* **Authentication Required:** No
-
-#### Request Body
-```json
-{
-  "nodes": [],
-  "edges": []
-}
-```
-
-#### Responses
-**Status: 200 OK**
-```json
-{
-  "status": "success",
-  "message": "DAG successfully synchronized."
-}
-```
-
-### GET /api/v1/catalog/lineage/{source_id}
-Retrieves the saved lineage graph for a source.
-
-* **Authentication Required:** No
-
-#### Responses
-**Status: 200 OK** (Returns LineageGraph dictionary)
-
-### GET /api/v1/catalog/tables
-Retrieves all active physical tables in a specified medallion layer.
-
-* **Authentication Required:** No
-
-#### Query Parameters
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `layer` | String | Yes | `bronze`, `silver`, or `gold` |
-
-#### Responses
-**Status: 200 OK**
-```json
-{
-  "layer": "silver",
-  "tables": ["stg_users"]
-}
-```
-
-### GET /api/v1/catalog/templates/{source_id}
-Retrieves raw SQL templates saved to the filesystem for a specific layer.
-
-* **Authentication Required:** No
-
-#### Query Parameters
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `layer` | String | Yes | `silver` or `gold` |
-
-#### Responses
-**Status: 200 OK** (Returns array of template file contents)
-
-### GET /api/v1/catalog/search
-Globally searches physical columns across the catalog.
-
-* **Authentication Required:** No
-
-#### Query Parameters
-| Parameter | Type | Required | Description |
-| :--- | :--- | :--- | :--- |
-| `q` | String | Yes | Search term (min 3 chars) |
-
-#### Responses
-**Status: 200 OK** (Returns search results array)
-
----
-
-## Analytics
-
-### GET /api/v1/analytics/overview
-Retrieves global dashboard analytics and ledger metrics.
-
-* **Authentication Required:** No
-
-#### Responses
-**Status: 200 OK** (Returns AnalyticsOverview object)
+  }
+  ```
