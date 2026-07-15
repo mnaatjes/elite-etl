@@ -45,15 +45,12 @@
 * **Approval Override:** When the user explicitly states "approved", "generate the code", or gives clear consent to a proposed design or model, agents are authorized to immediately bypass manual implementation recommendations and write the code directly to the filesystem using the appropriate tools.
 
 ## 6. Next Session Context / Handoff Notes (July 15, 2026)
-*   **Architecture Phase - Config-Driven API:** Transitioned into a documentation-first design phase for the strict Config-Driven API and SQLite refactoring. 
+*   **Architecture Phase - Config-Driven API:** Concluded the documentation-first design phase for the strict Config-Driven API and SQLite refactoring.
 *   **Completed Documentation:**
-    *   Authored `docs/explanation/architecture/02-adr-hitl-rules-and-boundaries.md` (HitL logic).
-    *   Authored `docs/explanation/architecture/03-adr-hexagonal-architecture-srp.md` (Hexagonal principles).
-    *   Authored `docs/explanation/architecture/04-adr-sqlite-dag-refactor.md` which finalized:
-        *   N:1 Source to Pipeline relationship.
-        *   Versioned `source_schemas` table to prevent schema drift hazards.
-        *   Explicit JSON payload contract (`nodes` and `edges`) for DAG modeling.
-        *   Strict Domain routing: Source Management (The "What"), Pipeline Admin (The "When"), and DAG Config (The "How").
-        *   Backend-for-Frontend (BFF) Facade endpoint for UI workspace aggregation.
-*   **Next Immediate Task (API Implementation):** Begin implementing the API routes and Pydantic models defined in `04-adr-sqlite-dag-refactor.md`, starting with the `source_schemas` table migration and the `POST /api/v1/sources/{source_id}/discover` Ephemeral Discovery logic.
-*   **AGY Conversation State:** The current active conversation UUID is `6ab95042-ed69-411d-b455-90c2b62ba4e5`. Use this UUID to restore context if the terminal session is interrupted.
+    *   Deprecated the monolithic `04-adr-sqlite-dag-refactor.md` and decoupled it into focused ADRs: `05` (Sources & Schemas), `06` (Pipelines), and `07` (DAG Topology & Validation).
+    *   Finalized Hexagonal APIs and Python Domain Services (Acyclic Validation, Connectivity, Schema Propagation).
+    *   Established Source Lifecycle Management (Discovery CRON, UI error visibility, URI patching).
+    *   Rewrote `docs/reference/api-reference.md` mapping strictly to Domains 1, 2, 3, and 4 (BFF).
+    *   Created `docs/explanation/workflows/` directory for System/Client Sequence Diagrams.
+*   **Next Immediate Task (Workflows & Implementation):** Begin drafting the white-box and black-box Sequence Diagrams in the `workflows/` directory, OR proceed directly to implementing the Pydantic models and FastAPI routes defined in `docs/reference/api-reference.md`.
+*   **AGY Conversation State:** The current active conversation UUID is `81a0e0fe-3331-4834-8113-78d69c10600e`. Use this UUID to restore context if the terminal session is interrupted.
