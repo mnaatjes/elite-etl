@@ -18,6 +18,9 @@ A **Source** is the physical origin entity (e.g., PostgreSQL DB, REST API). It i
 
 ### 2. Schema Versioning (The Mutability Hazard)
 External databases evolve (schema drift). To guarantee immutability and support Human-in-the-Loop drift resolution, schemas are extracted into the versioned `source_schemas` table. 
+
+> **RULE - The Source Schema:** The `source_schemas` table is a read-only mirror of external reality. It is strictly immutable by the user and is only updated when the `discover` endpoint confirms the external system has physically changed.
+
 When a DAG is authored, its Bronze Root Nodes must explicitly bind to a specific `source_schemas.id`, ensuring pipeline runs execute against a known contract.
 
 ### 3. Remediation & Prioritized Policy Recommendations (Schema Drift)

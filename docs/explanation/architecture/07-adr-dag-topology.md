@@ -68,3 +68,85 @@ This represents the asymmetrical read-optimized payload returned by the BFF. It 
   }
 }
 ```
+
+### 6. Illustrative Example: DAG Mutation Payload
+
+This represents the strictly structural Whole-State Replacement payload expected by `POST /api/v1/pipelines/{pipeline_id}/dags/`. Notice that `inferred_schema` is omitted, as it must be derived server-side.
+
+```json
+{
+  "description": "Standard user normalization pipeline",
+  "nodes": [
+    {
+      "id": "uuid-1", 
+      "bound_schema_id": "uuid-schema-1", 
+      "name": "bronze_raw_users",
+      "layer": "bronze",
+      "sql_template": "SELECT * FROM public.users"
+    },
+    {
+      "id": "uuid-2", 
+      "bound_schema_id": null, 
+      "name": "silver_clean_users",
+      "layer": "silver",
+      "sql_template": "SELECT id, TRIM(name) AS clean_name FROM bronze_raw_users"
+    }
+  ],
+  "edges": [
+    {
+      "source_node_id": "uuid-1",
+      "target_node_id": "uuid-2"
+    }
+  ]
+}
+```
+
+### 7. Execution Sequence: DAG Mutation Validation
+
+This sequence diagram illustrates how the `POST /api/v1/pipelines/{pipeline_id}/dags/` payload is processed. Crucially, the API does not route requests to other REST endpoints; instead, it orchestrates internal Python Domain Services synchronously before committing the transaction to the SQLite registry.
+
+```mermaid
+sequenceDiagram
+    actor Client as UI/Client
+    participant API as DAG Mutation API<br>(Domain 3)
+    participant Acyclic as Acyclic Validation<br>Service
+    participant Conn as Connectivity Check<br>Service
+    participant Schema as Schema Propagation<br>Service
+    database DB as SQLite Registry
+
+    Client->>API: POST /pipelines/{id}/dags/<br>(Minimal JSON)
+    
+    %% Step 1: Structural Validation
+    API->>Acyclic: Pass Edges Array (Kahn's Algo)
+    alt Cycle Detected
+        Acyclic-->>API: Error (Cycle)
+        API-->>Client: HTTP 400 Bad Request
+    end
+    Acyclic-->>API: OK (Acyclic)
+
+    %% Step 2: Orphan Prevention
+    API->>Conn: Pass Nodes & Edges (BFS)
+    alt Orphaned Nodes
+        Conn-->>API: Error (Orphan)
+        API-->>Client: HTTP 400 Bad Request
+    end
+    Conn-->>API: OK (Connected)
+
+    %% Step 3: Semantic Validation
+    API->>Schema: Pass Nodes & Edges
+    Schema->>DB: Query `source_schemas` via `bound_schema_id`
+    DB-->>Schema: Return JSON Catalogs
+    Schema->>Schema: Propagate catalogs down edges
+    alt SQL References Missing Column
+        Schema-->>API: Error (Schema Drift/Mismatch)
+        API-->>Client: HTTP 400 Bad Request (w/ affected nodes)
+    end
+    Schema-->>API: OK (Returns calculated inferred_schemas)
+
+    %% Step 4: Persistence
+    API->>DB: Insert new `dags` row (increment version)
+    API->>DB: Bulk insert `nodes` (w/ inferred_schemas)
+    API->>DB: Bulk insert `edges`
+    DB-->>API: Commit Transaction
+    API-->>Client: HTTP 201 Created
+```
