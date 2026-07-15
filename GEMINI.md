@@ -45,12 +45,12 @@
 * **Approval Override:** When the user explicitly states "approved", "generate the code", or gives clear consent to a proposed design or model, agents are authorized to immediately bypass manual implementation recommendations and write the code directly to the filesystem using the appropriate tools.
 
 ## 6. Next Session Context / Handoff Notes (July 15, 2026)
-*   **Architecture Phase - Config-Driven API:** Concluded the documentation-first design phase for the strict Config-Driven API and SQLite refactoring.
-*   **Completed Documentation:**
-    *   Deprecated the monolithic `04-adr-sqlite-dag-refactor.md` and decoupled it into focused ADRs: `05` (Sources & Schemas), `06` (Pipelines), and `07` (DAG Topology & Validation).
-    *   Finalized Hexagonal APIs and Python Domain Services (Acyclic Validation, Connectivity, Schema Propagation).
-    *   Established Source Lifecycle Management (Discovery CRON, UI error visibility, URI patching).
-    *   Rewrote `docs/reference/api-reference.md` mapping strictly to Domains 1, 2, 3, and 4 (BFF).
-    *   Created `docs/explanation/workflows/` directory for System/Client Sequence Diagrams.
-*   **Next Immediate Task (Workflows & Implementation):** Begin drafting the white-box and black-box Sequence Diagrams in the `workflows/` directory, OR proceed directly to implementing the Pydantic models and FastAPI routes defined in `docs/reference/api-reference.md`.
+*   **Phase Completion - SQLite Config-Driven API:** Fully implemented, tested, and released v0.1.0 of the Config-Driven API.
+*   **Completed Implementation:**
+    *   Built the physical SQLite repository adapters (`src/infrastructure/registry/repository.py`).
+    *   Wired up FastAPI routers for Domains 1-4 (Sources, Pipelines, DAGs, Editor BFF).
+    *   Passed Phase 5 Integration Testing (`test_e2e_integration.py`), proving cross-domain schema drift invalidation.
+    *   Created `CHANGELOG.md` at root to track major workflow milestones natively outside of Diátaxis documentation.
+    *   Drafted `10-adr-legacy-models-deprecation.md` proposing the purge of old `src/domain/models/` and `interfaces/` "zombie code".
+*   **Next Immediate Task:** Review and approve ADR 10 to execute the deletion of the legacy domain models. Once purged, assess the next architectural phase (e.g., Job Orchestration implementation or Frontend UI scaffolding).
 *   **AGY Conversation State:** The current active conversation UUID is `81a0e0fe-3331-4834-8113-78d69c10600e`. Use this UUID to restore context if the terminal session is interrupted.
