@@ -1,85 +1,45 @@
+from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List
-from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
-from src.domain.interfaces.registry import IRegistryRepository
-from src.domain.models.registry import DataSource, DataSourceCreate, DataSourceUpdate, SourceState
-from src.api.dependencies import get_registry_repository
+import uuid
 
+from src.api.schemas import SourceCreate, SourceResponse, SourcePatch, SourceSchemaResponse
+
+# Note: In a true Hexagonal architecture, we inject Domain Services here.
+# For Phase 2, we establish the routing contracts and HTTP shells.
 router = APIRouter()
 
-@router.post("/", response_model=DataSource, status_code=201)
-def create_source(
-    source_data: DataSourceCreate,
-    repo: IRegistryRepository = Depends(get_registry_repository)
-):
-    try:
-        return repo.create_source(source_data)
-    except Exception as e:
-        raise HTTPException(status_code=409, detail=str(e))
+@router.get("/", response_model=List[SourceResponse])
+def list_sources():
+    # TODO: Connect to SQLite repository
+    return []
 
-@router.get("/", response_model=List[DataSource])
-def list_sources(repo: IRegistryRepository = Depends(get_registry_repository)):
-    return repo.list_sources()
+@router.post("/", response_model=SourceResponse, status_code=status.HTTP_201_CREATED)
+def create_source(source: SourceCreate):
+    # TODO: Connect to SQLite repository
+    pass
 
-@router.get("/{source_id}", response_model=DataSource)
-def get_source(
-    source_id: UUID,
-    repo: IRegistryRepository = Depends(get_registry_repository)
-):
-    source = repo.get_source(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-    return source
+@router.get("/{source_id}", response_model=SourceResponse)
+def get_source(source_id: uuid.UUID):
+    # TODO: Connect to SQLite repository
+    pass
 
-class ScheduleUpdate(BaseModel):
-    schedule_interval_hours: int
+@router.patch("/{source_id}", response_model=SourceResponse)
+def patch_source(source_id: uuid.UUID, patch: SourcePatch):
+    # TODO: If patch.uri is present, orchestrate a forced synchronous Discovery run.
+    # TODO: Connect to SQLite repository
+    pass
 
-@router.put("/{source_id}/schedule", response_model=DataSource)
-def update_schedule(
-    source_id: UUID,
-    update_data: ScheduleUpdate,
-    repo: IRegistryRepository = Depends(get_registry_repository)
-):
-    source = repo.get_source(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-        
-    ds_update = DataSourceUpdate(schedule_interval_hours=update_data.schedule_interval_hours)
-    return repo.update_source(source_id, ds_update)
+@router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_source(source_id: uuid.UUID):
+    # TODO: Check orphan nodes constraint before setting state = ARCHIVED
+    pass
 
-@router.put("/{source_id}/approve", response_model=DataSource)
-def approve_source(
-    source_id: UUID,
-    repo: IRegistryRepository = Depends(get_registry_repository)
-):
-    source = repo.get_source(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-        
-    ds_update = DataSourceUpdate(state=SourceState.APPROVED)
-    return repo.update_source(source_id, ds_update)
+@router.post("/{source_id}/discover", status_code=status.HTTP_202_ACCEPTED)
+def discover_source(source_id: uuid.UUID):
+    # The Mutator. Triggers extraction and generates new source_schema version.
+    return {"message": "Discovery initiated"}
 
-@router.patch("/{source_id}", response_model=DataSource)
-def patch_source(
-    source_id: UUID,
-    update_data: DataSourceUpdate,
-    repo: IRegistryRepository = Depends(get_registry_repository)
-):
-    source = repo.get_source(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-    
-    return repo.update_source(source_id, update_data)
-
-@router.delete("/{source_id}", response_model=DataSource)
-def archive_source(
-    source_id: UUID,
-    repo: IRegistryRepository = Depends(get_registry_repository)
-):
-    source = repo.get_source(source_id)
-    if not source:
-        raise HTTPException(status_code=404, detail="Source not found")
-        
-    ds_update = DataSourceUpdate(state=SourceState.ARCHIVED)
-    return repo.update_source(source_id, ds_update)
+@router.get("/{source_id}/schemas/latest", response_model=SourceSchemaResponse)
+def get_latest_schema(source_id: uuid.UUID):
+    # The Fetcher. Fast SQLite-read endpoint.
+    pass

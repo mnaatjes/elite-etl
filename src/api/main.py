@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.infrastructure.registry.database import init_db
 from src.infrastructure.logging import setup_logging
-from src.api.routers import sources, pipeline, jobs, catalog, analytics
+from src.api.routers import sources, pipelines, dags, editor
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -29,7 +29,6 @@ app.add_middleware(
 )
 
 app.include_router(sources.router, prefix="/api/v1/sources", tags=["Sources"])
-app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Pipeline Operations"])
-app.include_router(jobs.router, prefix="/api/v1/jobs", tags=["Jobs"])
-app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["Catalog"])
-app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
+app.include_router(pipelines.router, prefix="/api/v1/pipelines", tags=["Pipelines"])
+app.include_router(dags.router, prefix="/api/v1/pipelines/{pipeline_id}/dags", tags=["DAG Configuration"])
+app.include_router(editor.router, prefix="/api/v1/editor", tags=["BFF Workspace"])
