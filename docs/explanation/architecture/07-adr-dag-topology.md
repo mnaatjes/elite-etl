@@ -13,9 +13,9 @@ This document defines the representation of Directed Acyclic Graphs (DAGs) and t
 *   **The DAG:** The mathematical payload bound to a Pipeline. It is responsible solely for the structural execution logic (Nodes, Edges, topological execution order). A named Pipeline maps to exactly one *active* DAG representation.
 
 #### Database Tables
-*   **`dags` Table:** Contains `id` (PK), `pipeline_id` (FK), `version_number`, `created_at`, `is_valid` (Boolean).
-*   **`nodes` Table:** Contains `id` (PK), `dag_id` (FK), `name`, `layer`, `sql_template`, `inferred_schema` (JSON).
-*   **`edges` Table:** Contains `id` (PK), `dag_id` (FK), `source_node_id`, `target_node_id`.
+*   **`dags` Table:** Contains `id` (UUID, PK), `pipeline_id` (UUID, FK), `version_number`, `created_at`, `is_valid` (Boolean).
+*   **`nodes` Table:** Contains `id` (UUID, PK), `dag_id` (UUID, FK), `bound_schema_id` (UUID, FK), `name`, `layer`, `sql_template`, `inferred_schema` (JSON).
+*   **`edges` Table:** Contains `id` (UUID, PK), `dag_id` (UUID, FK), `source_node_id` (UUID, FK), `target_node_id` (UUID, FK).
 
 ### 2. Domain Services & Integrity Enforcement
 Mathematical properties are derived dynamically by dedicated Domain Services to prevent state drift:

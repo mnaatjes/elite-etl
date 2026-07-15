@@ -24,22 +24,24 @@ The following Entity-Relationship diagram illustrates the decoupled database arc
 ```mermaid
 erDiagram
     SOURCES {
-        int id PK
+        uuid id PK
         string name
         string uri
         string state
         timestamp last_discovered_at
+        string discovery_cron
     }
     
     SOURCE_SCHEMAS {
-        int id PK
-        int source_id FK
+        uuid id PK
+        uuid source_id FK
         int version_number
         json catalog
+        timestamp created_at
     }
     
     PIPELINES {
-        int id PK
+        uuid id PK
         string name
         string schedule_cron
         timestamp created_at
@@ -47,24 +49,25 @@ erDiagram
     }
     
     PIPELINE_RUNS {
-        int id PK
-        int pipeline_id FK
+        uuid id PK
+        uuid pipeline_id FK
         string status
         string error_type
         json error_payload
     }
     
     DAGS {
-        int id PK
-        int pipeline_id FK
+        uuid id PK
+        uuid pipeline_id FK
         int version_number
         timestamp created_at
         boolean is_valid
     }
     
     NODES {
-        int id PK
-        int dag_id FK
+        uuid id PK
+        uuid dag_id FK
+        uuid bound_schema_id FK
         string name
         string layer
         string sql_template
@@ -72,10 +75,10 @@ erDiagram
     }
     
     EDGES {
-        int id PK
-        int dag_id FK
-        int source_node_id FK
-        int target_node_id FK
+        uuid id PK
+        uuid dag_id FK
+        uuid source_node_id FK
+        uuid target_node_id FK
     }
 
     %% Relationships

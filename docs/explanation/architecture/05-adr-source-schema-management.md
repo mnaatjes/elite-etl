@@ -13,8 +13,8 @@ This document defines the architectural logic for managing external data Sources
 A **Source** is the physical origin entity (e.g., PostgreSQL DB, REST API). It is fully decoupled from the Pipeline. A single DAG may consume N Sources, migrating away from legacy constraints.
 
 #### Database Tables
-*   **`sources` Table:** Contains `id` (PK), `name`, `uri`, `state`, `last_discovered_at`.
-*   **`source_schemas` Table:** Contains `id` (PK), `source_id` (FK), `version_number`, `catalog` (JSON).
+*   **`sources` Table:** Contains `id` (UUID, PK), `name`, `uri`, `state`, `last_discovered_at`, `discovery_cron` (String).
+*   **`source_schemas` Table:** Contains `id` (UUID, PK), `source_id` (UUID, FK), `version_number` (Integer), `catalog` (JSON), `created_at` (Timestamp).
 
 ### 2. Schema Versioning (The Mutability Hazard)
 External databases evolve (schema drift). To guarantee immutability and support Human-in-the-Loop drift resolution, schemas are extracted into the versioned `source_schemas` table. 
