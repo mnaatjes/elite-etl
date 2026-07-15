@@ -33,3 +33,38 @@ Strictly responsible for the mathematical execution graph.
 ### 4. API Domain 4: Backend-for-Frontend (BFF) Facade
 Aggregates domains to prevent UI N+1 queries during DAG authoring.
 *   **`GET /api/v1/editor/workspace/{pipeline_id}`**: Internally fetches the active DAG, pipeline metadata, and available Source schemas, returning a single, asymmetrical read-optimized payload distinct from the domain mutation endpoints.
+
+### 5. Illustrative Example: BFF Workspace Payload
+
+This represents the asymmetrical read-optimized payload returned by the BFF. It includes structured validation arrays for the UI to render drift states without string parsing.
+
+```json
+{
+  "pipeline": {
+    "id": 1,
+    "name": "Standard ETL"
+  },
+  "available_sources": [
+    {
+      "source_id": 10,
+      "latest_schema_version_id": 25,
+      "version_number": 2,
+      "schema_catalog": { }
+    }
+  ],
+  "active_dag": {
+    "version": "1.0",
+    "is_valid": false,
+    "nodes": [ ],
+    "edges": [ ],
+    "validation_errors": [
+      {
+        "node_id": "bronze_raw_users",
+        "error_type": "SchemaDrift",
+        "columns_affected": ["phone_number"],
+        "edges_affected": ["edge_123"]
+      }
+    ]
+  }
+}
+```
